@@ -38,6 +38,10 @@
     margin:2px 3px 2px 0; white-space:nowrap;
   }
   .wa-pill:hover{filter:brightness(1.08);}
+  .fechas-panel{margin:10px 0 14px; display:flex; flex-direction:column; gap:8px;}
+  .fecha-row{display:flex; gap:10px; align-items:center; flex-wrap:wrap; background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:8px 12px; font-size:13px;}
+  .fecha-row input{width:120px; text-align:center; font-weight:700; padding:6px 8px; border-radius:6px; border:1px solid var(--border);}
+  .fecha-row .aviso{color:var(--warn); font-size:12px;}
   .verif{color:#ef4444; font-weight:800; font-size:10.5px; letter-spacing:.03em; cursor:help;}
   .rev-btn{
     width:34px; height:34px; border-radius:8px; border:none; font-weight:800; font-size:16px;
@@ -169,6 +173,7 @@
   <div class="row" style="justify-content:space-between;">
     <div><b style="font-size:16px;">Resultados</b> — revisá la columna ACTOR, completá CARÁTULA, y borrá filas que no correspondan.</div>
   </div>
+  <div id="fechasPanel" class="fechas-panel"></div>
   <div class="tablewrap">
     <table id="resultsTable">
       <thead>
@@ -793,6 +798,22 @@ function fechaPagoDeTexto(texto){
   let anio = m[3]; if(anio.length === 2) anio = "20" + anio;
   return m[1].padStart(2,"0") + "/" + m[2].padStart(2,"0") + "/" + anio;
 }
+// Fecha "base" de una complementaria: 10/05/26Y1 y 10/05/26J2 -> 10/05/26 (comparten fecha de pago)
+function baseComplementaria(c){
+  const m = /^(\d{2})\/(\d{2})\/(\d{2,4})/.exec(c || "");
+  return m ? `${m[1]}/${m[2]}/${m[3].slice(-2)}` : (c || "SIN-COMPLEMENTARIA");
+}
+// Si una complementaria trae "Fecha de Pago" y otra de la misma fecha base no, todas usan esa fecha.
+function unificarFechasPorBase(lista){
+  const porBase = new Map();
+  lista.forEach(r => { if(r.fechaFuente === "pago" && r.fechaPago && !porBase.has(baseComplementaria(r.complementaria))) porBase.set(baseComplementaria(r.complementaria), r.fechaPago); });
+  let cambios = 0;
+  lista.forEach(r => {
+    const f = porBase.get(baseComplementaria(r.complementaria));
+    if(f && r.fechaPago !== f){ r.fechaPago = f; r.fechaFuente = "pago"; cambios++; }
+  });
+  return cambios;
+}
 // Convierte dd/mm/aaaa en un numero aaaammdd para ordenar cronologicamente (sin fecha -> al final)
 function fechaOrden(f){
   const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(f || "");
@@ -852,7 +873,7 @@ async function extractRecords(file){
   file._fechaInfo = fileFechaPago
     ? `Fecha de pago: ${fileFechaPago} (tomada de "Fecha de Pago")`
     : `⚠️ No se encontró "Fecha de Pago" en el PDF — se usó la fecha del encabezado (${fileFecha || "sin fecha"}). Revisala.`;
-  records.forEach(r => { r.complementaria = fileComplementaria; r.fechaPago = fileFechaPago || fileFecha; });
+  records.forEach(r => { r.complementaria = fileComplementaria; r.fechaPago = fileFechaPago || fileFecha; r.fechaFuente = fileFechaPago ? "pago" : "encabezado"; });
   return records;
 }
 
@@ -1094,6 +1115,7 @@ document.getElementById("btnProcess").addEventListener("click", async () => {
         log(`  ERROR procesando ${file.name}: ${e.message}`);
       }
     }
+    if(unificarFechasPorBase(allRecords)) log("Se unificó la fecha de pago de complementarias con la misma fecha (ej. Y1 y J2).");
     log(`Total registros: ${allRecords.length}. Cruzando contra la base de clientes...`);
     const matchedRaw = matchClients(allRecords);
     const matched = dedupeExact(matchedRaw);
@@ -1146,7 +1168,55 @@ document.getElementById("btnAddRow").addEventListener("click", () => {
   renderTable();
 });
 
+function ordenarResultados(){
+  results.sort((a,b) => {
+    const fa = fechaOrden(a.fechaPago), fb = fechaOrden(b.fechaPago);
+    if(fa !== fb) return fa - fb;
+    const ca = a.complementaria || "", cb = b.complementaria || "";
+    if(ca !== cb) return ca.localeCompare(cb);
+    return (a.name||"").localeCompare(b.name||"", 'es');
+  });
+}
+
+// Panel para ver/editar la fecha de pago (una por fecha base de complementaria)
+function renderFechas(){
+  const cont = document.getElementById("fechasPanel");
+  if(!cont) return;
+  const grupos = new Map();
+  results.forEach(r => {
+    const b = baseComplementaria(r.complementaria);
+    if(!grupos.has(b)) grupos.set(b, {comps: new Set(), fecha: r.fechaPago || "", dudosa: false});
+    const g = grupos.get(b);
+    if(r.complementaria) g.comps.add(r.complementaria);
+    if(!g.fecha && r.fechaPago) g.fecha = r.fechaPago;
+    if(r.fechaFuente === "encabezado") g.dudosa = true;
+  });
+  cont.innerHTML = "";
+  [...grupos.entries()].sort((x,y) => fechaOrden(x[1].fecha) - fechaOrden(y[1].fecha)).forEach(([b, g]) => {
+    const div = document.createElement("div");
+    div.className = "fecha-row";
+    const nombre = g.comps.size ? "Complementaria " + [...g.comps].sort().join(" / ") : "Filas sin complementaria";
+    div.innerHTML = `<b>${nombre}</b> — Fecha de pago:
+      <input type="text" value="${g.fecha}" placeholder="dd/mm/aaaa" data-base="${b}">
+      ${g.dudosa ? '<span class="aviso">⚠️ No se encontró "Fecha de Pago" en el PDF: revisala</span>' : ''}`;
+    cont.appendChild(div);
+  });
+  cont.querySelectorAll("input[data-base]").forEach(inp => {
+    inp.addEventListener("change", e => {
+      const m = /^\s*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2}|\d{4})\s*$/.exec(e.target.value);
+      if(!m){ e.target.style.borderColor = "var(--danger)"; e.target.title = "Formato: dd/mm/aaaa"; return; }
+      const anio = m[3].length === 2 ? "20" + m[3] : m[3];
+      const f = m[1].padStart(2,"0") + "/" + m[2].padStart(2,"0") + "/" + anio;
+      const b = e.target.dataset.base;
+      results.forEach(r => { if(baseComplementaria(r.complementaria) === b){ r.fechaPago = f; r.fechaFuente = "manual"; } });
+      ordenarResultados();
+      renderTable();
+    });
+  });
+}
+
 function renderTable(){
+  renderFechas();
   const tbody = document.getElementById("resultsBody");
   tbody.innerHTML = "";
   results.forEach((r, i) => {
