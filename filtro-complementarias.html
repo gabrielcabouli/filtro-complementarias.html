@@ -1211,12 +1211,15 @@ document.getElementById("btnPDF").addEventListener("click", () => {
       doc.setFont(undefined, "normal");
       doc.text(`Generado ${new Date().toLocaleDateString('es-AR')} - ${rows.length} clientes`, pageWidth - margin, 22, {align:"right"});
 
-      const linkZones = [];
+      // Telefonos de cada fila: los celulares se dibujan como boton verde de WhatsApp (con mensaje precargado)
+      const telInfo = rows.map(r => phoneLines(r.telefono).map(p => {
+        const a = analyzePhone(p);
+        return { display: a.display, link: a.link ? waLinkWithMessage(p, r) : null };
+      }));
+      const PILL_H = 11, PILL_GAP = 3;
 
       const body = rows.map((r,i) => {
-        const telLines = phoneLines(r.telefono).map(p => analyzePhone(p).display);
-        const firstLink = phoneLines(r.telefono).map(p => analyzePhone(p).link).find(l => l);
-        if(firstLink) linkZones.push({ rowIndex: i, url: firstLink });
+        const telLines = telInfo[i].map(t => t.display);
         const caratulaTxt = (r.caratula || "").split("||").map(s=>s.trim()).filter(Boolean).join("\n");
         const benefTxt = (r.anio ? r.anio + "\n" : "") + (r.beneficio || "");
         return [
@@ -1256,13 +1259,43 @@ document.getElementById("btnPDF").addEventListener("click", () => {
             if(r){
               if(data.row.index % 2 === 1) data.cell.styles.fillColor = [234,241,248];
               if(r.verificado === "dni"){ data.cell.styles.textColor = [20,90,50]; }
+              if(data.column.index === 3){
+                const n = telInfo[data.row.index].length;
+                // el texto se dibuja a mano en didDrawCell; se reserva el alto necesario
+                data.cell.text = [];
+                data.cell.styles.minCellHeight = n ? n * (PILL_H + PILL_GAP) - PILL_GAP + 8 : 0;
+              }
             }
           }
         },
         didDrawCell: (data) => {
           if(data.section === "body" && data.column.index === 3){
-            const z = linkZones.find(z => z.rowIndex === data.row.index);
-            if(z) doc.link(data.cell.x, data.cell.y, data.cell.width, data.cell.height, { url: z.url });
+            const tels = telInfo[data.row.index] || [];
+            if(tels.length){
+              const totalH = tels.length * (PILL_H + PILL_GAP) - PILL_GAP;
+              let y = data.cell.y + (data.cell.height - totalH) / 2;
+              const cx = data.cell.x + data.cell.width / 2;
+              doc.setFontSize(6.5);
+              tels.forEach(t => {
+                const txt = t.display;
+                if(t.link){
+                  doc.setFont(undefined, "bold");
+                  const w = Math.min(doc.getTextWidth(txt) + 8, data.cell.width - 4);
+                  const x = cx - w / 2;
+                  doc.setFillColor(37,211,102);
+                  doc.roundedRect(x, y, w, PILL_H, 5, 5, "F");
+                  doc.setTextColor(255,255,255);
+                  doc.text(txt, cx, y + PILL_H/2 + 2.3, {align:"center"});
+                  doc.link(x, y, w, PILL_H, { url: t.link });
+                } else {
+                  doc.setFont(undefined, "normal");
+                  doc.setTextColor(40,40,40);
+                  doc.text(txt, cx, y + PILL_H/2 + 2.3, {align:"center"});
+                }
+                y += PILL_H + PILL_GAP;
+              });
+              doc.setFont(undefined, "normal");
+            }
           }
           if(data.section === "body" && data.column.index === 0){
             const r = rows[data.row.index];
