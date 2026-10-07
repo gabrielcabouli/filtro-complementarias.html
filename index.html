@@ -784,7 +784,15 @@ async function extractLinesFromPage(page){
 
 const COMPLEMENTARIA_RE = /COMPLEMENTARIA\s+([\d]{2}\/[\d]{2}\/[\d]{2}[A-Z][\d])/i;
 const FECHA_PAGO_RE = /^(\d{2}\/\d{2}\/\d{4})\s+Hoja:/;          // fecha del encabezado (solo respaldo)
-const FECHA_PAGO_EXPL_RE = /Fecha\s+de\s+Pago:?\s*(\d{2}\/\d{2}\/\d{4})/i; // "Fecha de Pago: 07/10/2026" al final del listado
+// "Fecha de Pago: 07/10/2026" (al final del listado). Tolera espacios sueltos, ":" separado,
+// fechas con "-" o "." y dia/mes de un digito, y que la fecha quede en el renglon siguiente.
+const FECHA_PAGO_EXPL_RE = /F\s*e\s*c\s*h\s*a\s*d\s*e\s*P\s*a\s*g\s*o[^0-9]{0,15}?(\d{1,2})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{2,4})/i;
+function fechaPagoDeTexto(texto){
+  const m = FECHA_PAGO_EXPL_RE.exec(texto || "");
+  if(!m) return "";
+  let anio = m[3]; if(anio.length === 2) anio = "20" + anio;
+  return m[1].padStart(2,"0") + "/" + m[2].padStart(2,"0") + "/" + anio;
+}
 // Convierte dd/mm/aaaa en un numero aaaammdd para ordenar cronologicamente (sin fecha -> al final)
 function fechaOrden(f){
   const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(f || "");
@@ -798,6 +806,7 @@ async function extractRecords(file){
   let fileComplementaria = "";
   let fileFecha = "";
   let fileFechaPago = "";
+  const textoArchivo = [];
   let lastRec = null; // ultimo registro leido, para asignarle su "Expte.Juicio Caja" (viene en la linea siguiente)
   for(let p = 1; p <= pdf.numPages; p++){
     const page = await pdf.getPage(p);
@@ -811,10 +820,7 @@ async function extractRecords(file){
         const fm = FECHA_PAGO_RE.exec(line);
         if(fm) fileFecha = fm[1];
       }
-      if(!fileFechaPago){
-        const fp = FECHA_PAGO_EXPL_RE.exec(line);
-        if(fp) fileFechaPago = fp[1];
-      }
+      textoArchivo.push(line);
       if(SKIP_PATTERNS.some(pat => line.includes(pat))) continue;
       const jm = /Expte\.?\s*Juicio\s+Caja:?\s*(\d+)/i.exec(line);
       if(jm){ if(lastRec && !lastRec.juicio) lastRec.juicio = jm[1]; continue; }
@@ -838,6 +844,14 @@ async function extractRecords(file){
   }
   // el encabezado con la complementaria/fecha puede aparecer en cualquier pagina del archivo,
   // asi que se etiqueta a todos los registros de este archivo recien al final
+  // Busca "Fecha de Pago" en todo el texto del archivo unido (asi no importa en que renglon
+  // o pagina quedo, ni si el PDF corto la frase en pedazos). Si aparece varias veces, usa la ultima.
+  const plano = textoArchivo.join(" ").replace(/\s+/g, " ");
+  const todas = [...plano.matchAll(new RegExp(FECHA_PAGO_EXPL_RE.source, "gi"))];
+  if(todas.length) fileFechaPago = fechaPagoDeTexto(todas[todas.length-1][0]);
+  file._fechaInfo = fileFechaPago
+    ? `Fecha de pago: ${fileFechaPago} (tomada de "Fecha de Pago")`
+    : `⚠️ No se encontró "Fecha de Pago" en el PDF — se usó la fecha del encabezado (${fileFecha || "sin fecha"}). Revisala.`;
   records.forEach(r => { r.complementaria = fileComplementaria; r.fechaPago = fileFechaPago || fileFecha; });
   return records;
 }
@@ -1074,6 +1088,7 @@ document.getElementById("btnProcess").addEventListener("click", async () => {
       try{
         const recs = await extractRecords(file);
         log(`  ${recs.length} registros detectados` + (recs.length && recs[0].complementaria ? ` — Complementaria ${recs[0].complementaria}` : ""));
+        if(file._fechaInfo) log("  " + file._fechaInfo);
         allRecords = allRecords.concat(recs);
       } catch(e){
         log(`  ERROR procesando ${file.name}: ${e.message}`);
