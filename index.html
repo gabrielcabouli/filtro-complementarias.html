@@ -41,6 +41,9 @@
   .fechas-panel{margin:10px 0 14px; display:flex; flex-direction:column; gap:8px;}
   .fecha-row{display:flex; gap:10px; align-items:center; flex-wrap:wrap; background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:8px 12px; font-size:13px;}
   .fecha-row input{width:120px; text-align:center; font-weight:700; padding:6px 8px; border-radius:6px; border:1px solid var(--border);}
+  .fecha-row .btn-guardar{padding:6px 14px; font-size:13px;}
+  .fecha-row .btn-guardar.pendiente{background:var(--accent); border-color:var(--accent);}
+  .fecha-row .err{color:var(--danger); font-size:12px; font-weight:600;}
   .fecha-row .aviso{color:var(--warn); font-size:12px;}
   .verif{color:#ef4444; font-weight:800; font-size:10.5px; letter-spacing:.03em; cursor:help;}
   .rev-btn{
@@ -1093,6 +1096,7 @@ function log(msg){
 
 document.getElementById("btnProcess").addEventListener("click", async () => {
   document.getElementById("log").textContent = "🔘 Botón tocado, iniciando...";
+  ultimaFechaGuardada = "";
   const files = document.getElementById("fileInput").files;
   if(!files.length){ log("Elegi al menos un PDF."); return; }
   if(!PDFJS_OK || typeof pdfjsLib === "undefined"){
@@ -1198,21 +1202,55 @@ function renderFechas(){
     const nombre = g.comps.size ? "Complementaria " + [...g.comps].sort().join(" / ") : "Filas sin complementaria";
     div.innerHTML = `<b>${nombre}</b> — Fecha de pago:
       <input type="text" value="${g.fecha}" placeholder="dd/mm/aaaa" data-base="${b}">
-      ${g.dudosa ? '<span class="aviso">⚠️ No se encontró "Fecha de Pago" en el PDF: revisala</span>' : ''}`;
+      <button class="secondary btn-guardar" data-save="${b}">${ultimaFechaGuardada === b ? "✓ Guardado" : "💾 Guardar"}</button>
+      ${g.dudosa && ultimaFechaGuardada !== b ? '<span class="aviso">⚠️ No se encontró "Fecha de Pago" en el PDF: revisala</span>' : ''}`;
     cont.appendChild(div);
   });
   cont.querySelectorAll("input[data-base]").forEach(inp => {
-    inp.addEventListener("change", e => {
-      const m = /^\s*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2}|\d{4})\s*$/.exec(e.target.value);
-      if(!m){ e.target.style.borderColor = "var(--danger)"; e.target.title = "Formato: dd/mm/aaaa"; return; }
-      const anio = m[3].length === 2 ? "20" + m[3] : m[3];
-      const f = m[1].padStart(2,"0") + "/" + m[2].padStart(2,"0") + "/" + anio;
-      const b = e.target.dataset.base;
-      results.forEach(r => { if(baseComplementaria(r.complementaria) === b){ r.fechaPago = f; r.fechaFuente = "manual"; } });
-      ordenarResultados();
-      renderTable();
+    inp.addEventListener("keydown", e => { if(e.key === "Enter"){ e.preventDefault(); guardarFecha(inp); } });
+    inp.addEventListener("input", () => {
+      const btn = cont.querySelector(`button[data-save="${inp.dataset.base}"]`);
+      if(btn){ btn.textContent = "💾 Guardar"; btn.classList.add("pendiente"); }
     });
   });
+  cont.querySelectorAll("button[data-save]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const inp = cont.querySelector(`input[data-base="${btn.dataset.save}"]`);
+      if(inp) guardarFecha(inp);
+    });
+  });
+}
+
+let ultimaFechaGuardada = "";
+// Aplica la fecha escrita a todas las filas de esa complementaria (y sus variantes Y1/J2...)
+function guardarFecha(inp){
+  const m = /^\s*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2}|\d{4})\s*$/.exec(inp.value);
+  if(!m){
+    inp.style.borderColor = "var(--danger)"; inp.title = "Formato: dd/mm/aaaa";
+    alertaFecha(inp, "Fecha inválida — usá dd/mm/aaaa");
+    return false;
+  }
+  const anio = m[3].length === 2 ? "20" + m[3] : m[3];
+  const f = m[1].padStart(2,"0") + "/" + m[2].padStart(2,"0") + "/" + anio;
+  const b = inp.dataset.base;
+  results.forEach(r => { if(baseComplementaria(r.complementaria) === b){ r.fechaPago = f; r.fechaFuente = "manual"; } });
+  ultimaFechaGuardada = b;
+  ordenarResultados();
+  renderTable();
+  return true;
+}
+function alertaFecha(inp, txt){
+  const row = inp.closest(".fecha-row");
+  let sp = row.querySelector(".err"); if(!sp){ sp = document.createElement("span"); sp.className = "err"; row.appendChild(sp); }
+  sp.textContent = txt;
+}
+// Antes de descargar, guarda cualquier fecha que se haya escrito y no se haya guardado
+function guardarFechasPendientes(){
+  let ok = true;
+  document.querySelectorAll("#fechasPanel input[data-base]").forEach(inp => {
+    if(inp.value !== inp.defaultValue && !guardarFecha(inp)) ok = false;
+  });
+  return ok;
 }
 
 function renderTable(){
@@ -1282,6 +1320,7 @@ function renderTable(){
 }
 
 document.getElementById("btnCSV").addEventListener("click", () => {
+  if(!guardarFechasPendientes()) return;
   const header = ["NUM","REVISION","ESTADO","DNI","ACTOR","TELEFONO","CARATULA","AÑO","BENEFICIO","EXP","BRUTO","DESC","NETO","15%","20%","ORIGEN"];
   const rows = results.map((r,i) => [
     (r.dudoso ? "VERIFICAR " : "") + (i+1), (r.revision === "check" ? "✓" : r.revision === "x" ? "✗" : "?"), (r.verificado === "dni" ? "DNI confirmado" : r.dudoso ? "VERIFICAR - " + (r.motivoDuda||"") : "confirmado por juicio/caratula"), `${r.doctype} ${r.docnum}`, r.name, r.telefono||"", r.caratula||"", r.anio||"", r.beneficio, r.expte,
@@ -1313,6 +1352,7 @@ const PDF_COLS = [
 ];
 
 document.getElementById("btnPDF").addEventListener("click", () => {
+  if(!guardarFechasPendientes()) return;
   if(!results.length){
     alert("No hay ningún cliente en la tabla todavía — procesá un PDF primero (o revisá si el cruce encontró coincidencias).");
     return;
