@@ -90,6 +90,7 @@
   .bloqueo-caja input{width:100%; padding:12px; font-size:16px; border:1px solid var(--border); border-radius:8px; margin-bottom:12px; text-align:center;}
   .bloqueo-caja button{width:100%; padding:12px; font-size:15px;}
   #bloqueoErr{color:var(--danger); font-weight:700; margin-top:10px; min-height:18px;}
+  .aviso-sync{background:#fff4e5; border:1px solid #f59e0b; color:#92400e; border-radius:8px; padding:10px 14px; margin-top:12px; font-size:13px;}
   .sync-estado{font-size:12px; color:var(--muted);}
   .sync-estado.ok{color:var(--ok);} .sync-estado.error{color:var(--danger); font-weight:600;} .sync-estado.sync{color:var(--accent);}
   .modal-fondo{position:fixed; inset:0; background:rgba(15,23,42,.45); display:flex; align-items:center; justify-content:center; z-index:9000;}
@@ -1901,6 +1902,8 @@ function _renderArchivo(cont){
         <input type="file" id="archImport" accept="application/json" style="display:none;">
       </div>
     </div>
+    ${SYNC.configurado() ? "" : `<div class="aviso-sync">⚠️ <b>Esta PC todavía no está sincronizada</b>: lo que guardes acá no lo ven las otras PC ni la extensión.
+      Tocá <b>☁️ Configurar sincronización entre PC</b> y pegá el token (se hace <b>una sola vez</b>; después todas las PC y la extensión se configuran solas con la contraseña).</div>`}
     <div class="row" style="justify-content:space-between; margin-top:8px;">
       <div id="archEstado" class="arch-estado"></div>
       <div class="row" style="gap:8px;">
@@ -2345,13 +2348,48 @@ const SYNC = (() => {
     poll = setInterval(() => { if(document.visibilityState === "visible" && !BORRADORES.size) sincronizar(); }, 45000);
     document.addEventListener("visibilitychange", () => { if(document.visibilityState === "visible" && configurado() && !BORRADORES.size) sincronizar(); });
   }
+  // El token queda guardado ENCRIPTADO (con la contraseña) en el repositorio publico, rama "datos".
+  // Asi cualquier PC o la extension, con solo poner la contraseña, se configura sola.
+  const CFG_PUBLICA = {owner: "gabrielcabouli", repo: "filtro-complementarias.html", branch: "datos", path: "complementarias.enc.json", tokenPath: "acceso.enc.json"};
+  async function autoConfigurar(){
+    try{
+      const url = `https://raw.githubusercontent.com/${CFG_PUBLICA.owner}/${CFG_PUBLICA.repo}/${CFG_PUBLICA.branch}/${CFG_PUBLICA.tokenPath}?t=${Date.now()}`;
+      const r = await fetch(url, {cache: "no-store"});
+      if(!r.ok) return false;
+      const tk = await desencriptarTexto(CLAVE_SESION, await r.json());
+      cfg = {owner: CFG_PUBLICA.owner, repo: CFG_PUBLICA.repo, branch: CFG_PUBLICA.branch, path: CFG_PUBLICA.path, tokenEnc: await encriptarTexto(CLAVE_SESION, tk)};
+      token = tk;
+      localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
+      return true;
+    }catch(e){ return false; }
+  }
+  async function publicarAcceso(){
+    // sube el token encriptado para que las demas PC se configuren solas
+    const obj = await encriptarTexto(CLAVE_SESION, token);
+    const ruta = `/contents/${encodeURIComponent(cfg.tokenPath || CFG_PUBLICA.tokenPath)}`;
+    let sha = null;
+    const g = await api(`${ruta}?ref=${encodeURIComponent(cfg.branch)}`);
+    if(g.ok) sha = (await g.json()).sha;
+    const body = {message: "Acceso de sincronizacion (encriptado)", content: btoa(JSON.stringify(obj)), branch: cfg.branch};
+    if(sha) body.sha = sha;
+    let r = await api(ruta, {method: "PUT", body: JSON.stringify(body)});
+    if(r.status === 404){ await asegurarRama(); r = await api(ruta, {method: "PUT", body: JSON.stringify(body)}); }
+  }
   async function iniciar(){
     leerCfg();
-    if(cfg && cfg.tokenEnc){
+    if(!cfg) await autoConfigurar();
+    if(cfg && cfg.tokenEnc && !token){
       try{ token = await desencriptarTexto(CLAVE_SESION, cfg.tokenEnc); }
       catch(e){ token = null; estado = "error"; error = "no se pudo leer el token guardado"; }
     }
-    if(configurado()){ await sincronizar(); arrancarPoll(); }
+    if(configurado()){
+      await sincronizar(); arrancarPoll();
+      // PC configuradas con una version anterior: se publica el acceso para que las demas se configuren solas
+      try{
+        const r = await fetch(`https://raw.githubusercontent.com/${cfg.owner}/${cfg.repo}/${cfg.branch}/${CFG_PUBLICA.tokenPath}?t=${Date.now()}`, {cache: "no-store"});
+        if(r.status === 404) await publicarAcceso();
+      }catch(_){}
+    }
     pintar();
   }
 
@@ -2396,7 +2434,7 @@ const SYNC = (() => {
       if(!owner || !repo || !tk){ msg.textContent = "Completá usuario, repositorio y token."; return; }
       msg.textContent = "Probando conexión…";
       const prev = {cfg, token};
-      cfg = {owner, repo, branch: "datos", path: "complementarias.enc.json"}; token = tk;
+      cfg = {owner, repo, branch: "datos", path: "complementarias.enc.json", tokenPath: "acceso.enc.json"}; token = tk;
       try{
         const r = await api("");
         if(r.status === 401) throw new Error("El token no es válido.");
@@ -2408,6 +2446,7 @@ const SYNC = (() => {
         localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
         msg.textContent = "✓ Conectado. Sincronizando…";
         await sincronizar(); arrancarPoll();
+        try{ await publicarAcceso(); }catch(_){}
         if(estado === "error") throw new Error(error);
         m.remove(); renderArchivo();
       }catch(e){
