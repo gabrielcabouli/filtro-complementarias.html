@@ -40,7 +40,7 @@
   .wa-pill:hover{filter:brightness(1.08);}
   .fechas-panel{margin:10px 0 14px; display:flex; flex-direction:column; gap:8px;}
   .fecha-row{display:flex; gap:10px; align-items:center; flex-wrap:wrap; background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:8px 12px; font-size:13px;}
-  .fecha-row input{width:120px; text-align:center; font-weight:700; padding:6px 8px; border-radius:6px; border:1px solid var(--border);}
+  .fecha-row input{width:260px; text-align:center; font-weight:700; padding:6px 8px; border-radius:6px; border:1px solid var(--border);}
   .fecha-row .btn-guardar{padding:6px 14px; font-size:13px;}
   .fecha-row .btn-guardar.pendiente{background:var(--accent); border-color:var(--accent);}
   .fecha-row .err{color:var(--danger); font-size:12px; font-weight:600;}
@@ -820,8 +820,9 @@ function unificarFechasPorBase(lista){
 }
 // Convierte dd/mm/aaaa en un numero aaaammdd para ordenar cronologicamente (sin fecha -> al final)
 function fechaOrden(f){
-  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(f || "");
-  return m ? +(m[3] + m[2] + m[1]) : 99999999;
+  // toma la primera fecha que aparezca (sirve tambien para textos como "28/09/2026 al 05/10/2026")
+  const m = /(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(f || "");
+  return m ? +(m[3] + m[2].padStart(2,"0") + m[1].padStart(2,"0")) : 99999999;
 }
 
 async function extractRecords(file){
@@ -1072,9 +1073,16 @@ function waLink(phoneRaw){
 function waMessage(r){
   const dni = (r.docnum || "").trim();
   const nombre = (r.name || "").trim();
-  const fecha = r.fechaPago || "__/__/____";
+  const f = (r.fechaPago || "").trim();
+  let cuando;
+  if(!f) cuando = "el día __/__/____";
+  else if(/^\d{2}\/\d{2}\/\d{4}$/.test(f)) cuando = "el día " + f;
+  else {
+    const rango = /^(\d{1,2}\/\d{1,2}\/\d{2,4})\s+(?:al|a|-|hasta(?: el)?)\s+(\d{1,2}\/\d{1,2}\/\d{2,4})$/i.exec(f);
+    cuando = rango ? `entre el ${rango[1]} y el ${rango[2]}` : f;
+  }
   return "⚠️ ATENCION⚠️ ESTE ES UN MENSAJE AUTOMATICO POR PARTE DEL ESTUDIO JURIDICO GÜNSBERG - LAMEDICA- CABOULI, ABOGADOS ESPECIALISTAS EN JUICIOS DE PFA -MUTUAL DE SUBOFICIALES- . SE LE RUEGA NO CONTESTAR.\n" +
-    `👋 Nos ponemos en comunicación con ${nombre} (DNI ${dni}) en miras de informarle que se depositará la retroactividad del juicio en su cuenta personal el día ${fecha} 📅\n` +
+    `👋 Nos ponemos en comunicación con ${nombre} (DNI ${dni}) en miras de informarle que se depositará la retroactividad del juicio en su cuenta personal ${cuando} 📅\n` +
     "Una vez corroborado el depósito, solicitamos tener a bien comunicarse con nuestras oficinas al ☎️ 43455532 / 43453354 / 43455532 de 16 a 19 hs Lunes a Jueves.      \n" +
     "En caso de no ser el destinatario correcto, por favor tener a bien desestimar el mensaje, pidiéndole disculpas por la molestia ocasionada. Muchas gracias";
 }
@@ -1240,7 +1248,7 @@ function renderFechas(){
     div.className = "fecha-row";
     const nombre = g.comps.size ? "Complementaria " + [...g.comps].sort().join(" / ") : "Filas sin complementaria";
     div.innerHTML = `<b>${nombre}</b> — Fecha de pago:
-      <input type="text" value="${g.fecha}" placeholder="dd/mm/aaaa" data-base="${b}">
+      <input type="text" value="${(g.fecha||"").replace(/&/g,"&amp;").replace(/"/g,"&quot;")}" placeholder="dd/mm/aaaa o texto" data-base="${b}">
       <button class="secondary btn-guardar" data-save="${b}">${ultimaFechaGuardada === b ? "✓ Guardado" : "💾 Guardar"}</button>
       ${g.dudosa && ultimaFechaGuardada !== b ? '<span class="aviso">⚠️ No se encontró "Fecha de Pago" en el PDF: revisala</span>' : ''}`;
     cont.appendChild(div);
@@ -1263,14 +1271,16 @@ function renderFechas(){
 let ultimaFechaGuardada = "";
 // Aplica la fecha escrita a todas las filas de esa complementaria (y sus variantes Y1/J2...)
 function guardarFecha(inp){
-  const m = /^\s*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2}|\d{4})\s*$/.exec(inp.value);
-  if(!m){
-    inp.style.borderColor = "var(--danger)"; inp.title = "Formato: dd/mm/aaaa";
-    alertaFecha(inp, "Fecha inválida — usá dd/mm/aaaa");
+  // Acepta una fecha (se normaliza a dd/mm/aaaa) o cualquier texto libre
+  // (ej. "28/09/2026 al 05/10/2026", "a confirmar"), que se guarda tal cual.
+  const texto = inp.value.replace(/\s+/g, " ").trim();
+  if(!texto){
+    inp.style.borderColor = "var(--danger)";
+    alertaFecha(inp, "Escribí una fecha o un texto");
     return false;
   }
-  const anio = m[3].length === 2 ? "20" + m[3] : m[3];
-  const f = m[1].padStart(2,"0") + "/" + m[2].padStart(2,"0") + "/" + anio;
+  const m = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2}|\d{4})$/.exec(texto);
+  const f = m ? m[1].padStart(2,"0") + "/" + m[2].padStart(2,"0") + "/" + (m[3].length === 2 ? "20" + m[3] : m[3]) : texto;
   const b = inp.dataset.base;
   results.forEach(r => { if(baseComplementaria(r.complementaria) === b){ r.fechaPago = f; r.fechaFuente = "manual"; } });
   ultimaFechaGuardada = b;
