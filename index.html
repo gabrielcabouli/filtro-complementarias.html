@@ -1937,8 +1937,8 @@ function _renderArchivo(cont){
             <span class="arch-pend" data-pend="${esc(c.id)}">Pendiente 15%: <b>${fmtMoney(t.p15)}</b> · 20%: <b>${fmtMoney(t.p20)}</b></span>
             <span class="row" style="gap:6px;">
               ${pendientesDe(c.id) ? `<button class="mini btn-guardar-todo" data-guardartodo="${esc(c.id)}">💾 GUARDAR TODOS LOS CAMBIOS</button>` : ""}
-              <button class="secondary mini" data-pdf="${esc(c.id)}">⬇ PDF</button>
-              <button class="danger" data-delcomp="${esc(c.id)}">Eliminar</button>
+              <button class="secondary mini" data-pdf="${esc(c.id)}">⬇ DESCARGAR PDF</button>
+              <button class="danger" data-delcomp="${esc(c.id)}">🗑 Eliminar</button>
             </span>
           </div>`;
         if(abierto){
@@ -2014,9 +2014,12 @@ function conectarArchivo(cont){
     }
     generarPDF(filasVivas(c), {estado: true, nombre: `complementaria_${(c.complementaria||"sin-numero").replace(/\//g,"-")}_estado_pagos.pdf`});
   }));
-  cont.querySelectorAll("[data-delcomp]").forEach(btn => btn.addEventListener("click", () => {
+  cont.querySelectorAll("[data-delcomp]").forEach(btn => btn.addEventListener("click", async () => {
     const c = ARCHIVO[btn.dataset.delcomp];
-    if(confirm(`¿Eliminar la complementaria ${c.complementaria} del archivo? Se pierden los tildes y notas.`)){
+    const n = filasVivas(c).length;
+    if(await preguntar(`¿Eliminar la complementaria ${c.complementaria}?`,
+        `Se borran sus ${n} actores con todos los tildes y comentarios, también en las otras PC. Esta acción no se puede deshacer.`,
+        "Sí, eliminar")){
       // queda marcada como eliminada (asi tambien se elimina en las otras PC)
       ARCHIVO[c.id] = { id: c.id, complementaria: c.complementaria, anio: c.anio, fechaPago: c.fechaPago, borrado: true, mod: ahoraMs(), filas: [] };
       guardarArchivo(); renderArchivo(); }
@@ -2076,9 +2079,9 @@ function conectarArchivo(cont){
       ultimaFilaGuardada = clave;
       renderArchivo();
     });
-    tr.querySelector("[data-delfila]").addEventListener("click", () => {
+    tr.querySelector("[data-delfila]").addEventListener("click", async () => {
       const f = c.filas[i];
-      if(confirm(`¿Quitar a ${f.name || "este actor"} de la complementaria ${c.complementaria}?`)){
+      if(await preguntar(`¿Quitar a ${f.name || "este actor"}?`, `Se quita de la complementaria ${c.complementaria}, con sus tildes y comentario.`, "Sí, quitar")){
         BORRADORES.delete(clave);
         c.filas[i] = Object.assign({}, f, { borrado: true, mod: ahoraMs() });   // queda marcada como quitada
         guardarArchivo(); renderArchivo(); }
@@ -2086,6 +2089,26 @@ function conectarArchivo(cont){
   });
 }
 
+// Ventana de confirmacion propia (bien visible; no depende de los avisos del navegador)
+function preguntar(titulo, detalle, textoSi){
+  return new Promise(ok => {
+    const m = document.createElement("div");
+    m.className = "modal-fondo";
+    m.innerHTML = `<div class="modal" style="width:460px;">
+      <h3 style="color:#b91c1c;">⚠️ ${esc(titulo)}</h3>
+      <p>${esc(detalle)}</p>
+      <div class="actions" style="justify-content:flex-end;">
+        <button class="secondary" data-r="no">Cancelar</button>
+        <button style="background:#dc2626;" data-r="si">${esc(textoSi || "Sí")}</button>
+      </div></div>`;
+    const cerrar = v => { m.remove(); document.removeEventListener("keydown", tecla); ok(v); };
+    const tecla = e => { if(e.key === "Escape") cerrar(false); };
+    m.addEventListener("click", e => { if(e.target === m) cerrar(false); const r = e.target.dataset && e.target.dataset.r; if(r) cerrar(r === "si"); });
+    document.addEventListener("keydown", tecla);
+    document.body.appendChild(m);
+    m.querySelector('[data-r="no"]').focus();
+  });
+}
 const BORRADORES = new Map();   // "id|indice" -> copia editada de la fila, sin guardar
 let ultimaFilaGuardada = "";
 function pendientesDe(id){ let n = 0; BORRADORES.forEach((_, k) => { if(k.startsWith(id + "|")) n++; }); return n; }
