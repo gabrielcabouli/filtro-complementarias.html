@@ -149,6 +149,10 @@
   .modal .comp-juicio label.opt-juicio{display:flex; gap:8px; align-items:flex-start; font-size:12.5px; font-weight:600; color:#1e293b; padding:6px 8px; border-radius:6px; cursor:pointer;}
   .modal .comp-juicio label.opt-juicio.sel{background:#dbeafe;}
   .modal .comp-juicio label.opt-juicio input{display:inline-block; width:18px; height:18px; margin:2px 0 0; flex:0 0 auto;}
+  .btn-copiar{background:#7c3aed;}
+  .copia-msg{margin-top:10px; font-size:13px; border-radius:8px;}
+  .copia-msg.ok{background:#ecfdf3; color:#166534; padding:8px 10px; border:1px solid #86efac;}
+  .copia-msg.no{background:#fff7ed; color:#9a3412; padding:8px 10px; border:1px solid #fdba74;}
   .comp-pct{background:#fffbeb; border:1px solid #fcd34d; border-radius:10px; padding:10px 12px;}
   .comp-pct-t{font-size:13px; font-weight:700; color:#92400e; margin-bottom:6px;}
   .comp-pct label{display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:8px; cursor:pointer; font-size:15px;}
@@ -2002,7 +2006,7 @@ function _renderArchivo(cont){
         if(abierto){
           html += `<div class="tablewrap"><table class="arch-tabla"><thead><tr>
             <th>#</th><th>DNI</th><th>ACTOR</th><th>Teléfono</th><th>Carátula</th><th>Beneficio</th>
-            <th class="num">Bruto</th><th class="num">Neto</th><th class="num">15%</th><th class="num">20%</th>
+            <th class="num">Bruto</th><th class="num">Descuentos</th><th class="num">Neto</th><th class="num">15%</th><th class="num">20%</th>
             <th>Honorarios</th><th>Liquidación contador</th><th>Comentarios</th><th></th></tr></thead><tbody>`;
           filas.forEach(({f: fGuardada, i}) => {
             const borrador = BORRADORES.get(c.id + "|" + i);
@@ -2018,6 +2022,7 @@ function _renderArchivo(cont){
               <td><textarea data-f="caratula" rows="3" style="width:190px;">${esc((f.caratula||"").split("||").map(x=>x.trim()).join("\n"))}</textarea></td>
               <td><input data-f="beneficio" value="${esc(f.beneficio)}" style="width:85px;"></td>
               <td class="num"><input data-f="bruto" value="${(f.bruto||0).toFixed(2)}" style="width:88px;text-align:right;"></td>
+              <td class="num"><input data-f="desc" value="${(f.desc||0).toFixed(2)}" style="width:88px;text-align:right;"></td>
               <td class="num"><input data-f="neto" value="${(f.neto||0).toFixed(2)}" style="width:88px;text-align:right;"></td>
               <td class="num">${fmtMoney((f.bruto||0)*0.15)}</td>
               <td class="num">${fmtMoney((f.bruto||0)*0.20)}</td>
@@ -2119,12 +2124,12 @@ function conectarArchivo(cont){
     tr.querySelectorAll("[data-f]").forEach(inp => {
       inp.addEventListener("input", () => {
         const f = borrador(), k = inp.dataset.f;
-        if(k === "bruto" || k === "neto") f[k] = parseFloat(inp.value.replace(",", ".")) || 0;
+        if(k === "bruto" || k === "neto" || k === "desc") f[k] = parseFloat(inp.value.replace(",", ".")) || 0;
         else if(k === "caratula") f[k] = inp.value.split("\n").map(x=>x.trim()).filter(Boolean).join("||");
         else f[k] = inp.value;
         marcarPendiente();
       });
-      if(["bruto","neto","telefono"].includes(inp.dataset.f)) inp.addEventListener("change", () => renderArchivo());
+      if(["bruto","desc","neto","telefono"].includes(inp.dataset.f)) inp.addEventListener("change", () => renderArchivo());
     });
     tr.querySelectorAll("[data-chk]").forEach(chk => chk.addEventListener("change", () => {
       const f = borrador(), k = chk.dataset.chk;
@@ -2266,14 +2271,38 @@ function abrirCompartir(c, f){
       <div class="actions" style="justify-content:flex-end;">
         <button class="secondary" data-a="cerrar">Cancelar</button>
         <button class="secondary" data-a="bajar">⬇ Descargar PDF</button>
+        <button class="btn-copiar" data-a="copiar">📋 COPIAR</button>
         <button class="btn-wa" data-a="wa">📲 Compartir por WhatsApp</button>
       </div>
+      <div id="copiaMsg" class="copia-msg"></div>
       <div class="muted" style="font-size:12px; margin-top:8px;">${tel ? "WhatsApp del cliente: " + esc(tel.a.display) : "El cliente no tiene celular cargado: vas a poder elegir el contacto en WhatsApp."}</div>
     </div>`;
     m.querySelectorAll('input[name="pct"]').forEach(r => r.addEventListener("change", () => { pct = +r.value; pintar(); }));
     m.querySelectorAll('input[name="jui"]').forEach(r => r.addEventListener("change", () => { sel = +r.value; jui = {...caratulas[sel]}; pintar(); }));
     m.querySelectorAll('[data-j]').forEach(inp => inp.addEventListener("input", () => { jui[inp.dataset.j] = inp.value; }));
     m.querySelector('[data-a="cerrar"]').addEventListener("click", () => m.remove());
+    m.querySelector('[data-a="copiar"]').addEventListener("click", () => {
+      const msg = m.querySelector("#copiaMsg"), btn = m.querySelector('[data-a="copiar"]');
+      btn.disabled = true; btn.textContent = "Copiando…"; msg.textContent = "";
+      const {blob, archivo} = generarPDFCliente(c, f, pct, jui);
+      const pngPromesa = pdfAImagen(blob);
+      const listo = ok => {
+        btn.disabled = false; btn.textContent = "📋 COPIAR";
+        msg.className = "copia-msg " + (ok ? "ok" : "no");
+        msg.innerHTML = ok
+          ? "✓ <b>Imagen copiada.</b> Pegala en el chat de WhatsApp (o donde quieras) con <b>Ctrl + V</b>; en el celular, mantené apretado el campo de texto → <b>Pegar</b>."
+          : "Este navegador no deja copiar imágenes: se descargó la imagen (" + esc(archivo.replace(/\.pdf$/, ".png")) + ") para que la adjuntes.";
+      };
+      try{
+        // se crea en el mismo clic (requisito del iPhone) con la imagen "en camino"
+        const item = new ClipboardItem({"image/png": pngPromesa});
+        navigator.clipboard.write([item]).then(() => listo(true)).catch(async () => {
+          bajarBlob(await pngPromesa, archivo.replace(/\.pdf$/, ".png")); listo(false);
+        });
+      }catch(e){
+        pngPromesa.then(png => { bajarBlob(png, archivo.replace(/\.pdf$/, ".png")); listo(false); });
+      }
+    });
     m.querySelector('[data-a="bajar"]').addEventListener("click", () => { const {blob, archivo} = generarPDFCliente(c, f, pct, jui); bajarBlob(blob, archivo); });
     m.querySelector('[data-a="wa"]').addEventListener("click", async () => {
       const {blob, archivo} = generarPDFCliente(c, f, pct, jui);
@@ -2297,6 +2326,28 @@ function abrirCompartir(c, f){
   pintar();
   m.addEventListener("click", e => { if(e.target === m) m.remove(); });
   document.body.appendChild(m);
+}
+// Convierte la primera hoja del PDF en imagen PNG (recortando el blanco de abajo)
+async function pdfAImagen(pdfBlob){
+  const pdf = await pdfjsLib.getDocument({data: await pdfBlob.arrayBuffer()}).promise;
+  const page = await pdf.getPage(1);
+  const vp = page.getViewport({scale: 2});
+  const cv = document.createElement("canvas"); cv.width = vp.width; cv.height = vp.height;
+  const ctx = cv.getContext("2d");
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, cv.width, cv.height);
+  await page.render({canvasContext: ctx, viewport: vp}).promise;
+  // busca la ultima linea con contenido (sin contar el pie "Generado el...")
+  const data = ctx.getImageData(0, 0, cv.width, cv.height).data;
+  let fin = cv.height - 1;
+  const pie = cv.height - Math.round(60 * 2);
+  for(let y = pie; y > 0; y--){
+    let tiene = false;
+    for(let x = 0; x < cv.width; x += 3){ const k = (y * cv.width + x) * 4; if(data[k] < 235 || data[k+1] < 235 || data[k+2] < 235){ tiene = true; break; } }
+    if(tiene){ fin = Math.min(cv.height, y + 50); break; }
+  }
+  const out = document.createElement("canvas"); out.width = cv.width; out.height = fin;
+  out.getContext("2d").drawImage(cv, 0, 0);
+  return await new Promise(ok => out.toBlob(ok, "image/png"));
 }
 function bajarBlob(blob, nombre){
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = nombre;
