@@ -901,10 +901,32 @@ function normalizeName(s){
 const DOC_TYPES = "LE|DU|DNI|LC|CI";
 const MONEY = "[\\d,]+\\.\\d{2}";
 const BENEF = "\\d{1,3}-\\d+/\\S*";
+// Despues del expediente vienen los importes. A veces la columna DESCUENTOS viene vacia o con "-"
+// (bruto = neto), por eso se toman todos los importes del renglon y se elige la combinacion
+// que cumple BRUTO - DESCUENTOS = NETO.
 const LINE_RE = new RegExp(
   "^(" + DOC_TYPES + ")\\s+(\\d+)\\s+(.+?)\\s+(?:(\\d{1,2})\\s+)?(" + BENEF + ")\\s+(\\d+)\\s+(" +
-  MONEY + ")\\s+(" + MONEY + ")\\s+(" + MONEY + ")(?:\\s+(NB|DPP))?$"
+  MONEY + "(?:\\s+(?:-|" + MONEY + "))*)(?:\\s+(NB|DPP))?\\s*$"
 );
+let ORDEN_COLUMNAS = null;   // orden de BRUTO / DESCUENTOS / NETO segun el encabezado del listado
+function leerImportes(txt){
+  const v = (txt.match(new RegExp(MONEY, "g")) || []).map(parseAmount);
+  const ok = (b, d, n) => Math.abs(b - d - n) < 0.02;
+  // si el encabezado trae otro orden (ej. BRUTO NETO DESCUENTOS) se respeta
+  if(ORDEN_COLUMNAS && v.length >= 3 && ORDEN_COLUMNAS.join() !== "bruto,desc,neto"){
+    const o = {}; ORDEN_COLUMNAS.forEach((k, i) => o[k] = v[i]);
+    if(ok(o.bruto, o.desc, o.neto)) return {bruto: o.bruto, desc: o.desc, neto: o.neto};
+  }
+  // sin descuentos: bruto y neto iguales y un 0,00 de otra columna al final
+  if(v.length >= 3 && Math.abs(v[0] - v[1]) < 0.02 && v[2] === 0) return {bruto: v[0], desc: 0, neto: v[1]};
+  if(v.length >= 3 && ok(v[0], v[1], v[2])) return {bruto: v[0], desc: v[1], neto: v[2]};
+  if(v.length >= 2 && Math.abs(v[0] - v[1]) < 0.02) return {bruto: v[0], desc: 0, neto: v[1]};   // sin descuentos
+  for(let i = 0; i < v.length; i++) for(let j = i + 1; j < v.length; j++) for(let k = j + 1; k < v.length; k++)
+    if(v[i] > 0 && ok(v[i], v[j], v[k])) return {bruto: v[i], desc: v[j], neto: v[k]};
+  if(v.length >= 3) return {bruto: v[0], desc: v[1], neto: v[2]};
+  if(v.length === 2) return {bruto: v[0], desc: Math.max(0, v[0] - v[1]), neto: v[1]};
+  return {bruto: v[0] || 0, desc: 0, neto: v[0] || 0};
+}
 
 const SKIP_PATTERNS = [
   "Ministerio de Seguridad","Caja de Retiros","Pensiones de la Pol",
@@ -995,6 +1017,10 @@ async function extractRecords(file){
         if(fm) fileFecha = fm[1];
       }
       textoArchivo.push(line);
+      if(/BRUTO/.test(line) && /NETO/.test(line)){
+        const pos = {bruto: line.indexOf("BRUTO"), desc: line.indexOf("DESCUENTO"), neto: line.search(/NETO/)};
+        if(pos.desc >= 0) ORDEN_COLUMNAS = Object.keys(pos).sort((a, b) => pos[a] - pos[b]);
+      }
       if(SKIP_PATTERNS.some(pat => line.includes(pat))) continue;
       const jm = /Expte\.?\s*Juicio\s+Caja:?\s*(\d+)/i.exec(line);
       if(jm){ if(lastRec && !lastRec.juicio) lastRec.juicio = jm[1]; continue; }
@@ -1009,7 +1035,7 @@ async function extractRecords(file){
       records.push({
         doctype: m[1], docnum: m[2], name: name,
         beneficio: m[5], expte: m[6],
-        bruto: parseAmount(m[7]), desc: parseAmount(m[8]), neto: parseAmount(m[9]),
+        ...leerImportes(m[7]),
         origen: file.name
       });
       Object.assign(records[records.length-1], lastRec);
@@ -1806,7 +1832,11 @@ async function cargarArchivo(){
 function migrarArchivo(A){
   Object.values(A).forEach(c => {
     if(c.mod == null) c.mod = Date.parse(c.actualizado || "") || 0;
-    (c.filas || []).forEach(f => { if(!f._k) f._k = claveFila(f); if(f.mod == null) f.mod = 0; });
+    (c.filas || []).forEach(f => {
+      if(!f._k) f._k = claveFila(f); if(f.mod == null) f.mod = 0;
+      // correccion: filas guardadas con el bruto puesto como descuento y neto en 0 (listados sin descuentos)
+      if(f.bruto > 0 && Math.abs((f.desc || 0) - f.bruto) < 0.02 && !f.neto){ f.desc = 0; f.neto = f.bruto; f.mod = Date.now(); }
+    });
   });
 }
 const ahoraMs = () => Date.now();
