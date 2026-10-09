@@ -1,4 +1,4 @@
-FILTRO DE COMPLEMENTARIAS - PAQUETE COMPLETO (version 3.8.2)
+FILTRO DE COMPLEMENTARIAS - PAQUETE COMPLETO (version 3.9.1)
 
 Contiene TODOS los cambios hechos hasta ahora:
 contraseña, base de clientes encriptada, sincronizacion entre PC por GitHub (se configura sola con la contraseña),

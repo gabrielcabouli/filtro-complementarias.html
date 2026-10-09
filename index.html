@@ -182,10 +182,14 @@
   .deu-tot{color:#b45309; font-size:13px;}
   .deu-tabla td{vertical-align:middle;}
   .deu-car{font-size:11px; color:var(--muted); max-width:260px;}
-  .deu-obs{font-size:12px; max-width:200px; white-space:pre-wrap;}
+  .deu-obs{font-size:12px; min-width:250px; width:250px; vertical-align:middle;}
   .deu-acc button{display:block; width:100%; margin:3px 0; white-space:nowrap;}
   .btn-abono{background:#16a34a;}
-  .bdg{display:inline-block; font-size:10px; font-weight:800; padding:2px 7px; border-radius:6px; margin:1px 0; white-space:nowrap;}
+  .bdg{display:inline-block; font-size:13px; font-weight:800; padding:4px 9px; border-radius:6px; margin:2px 0; white-space:nowrap;}
+  .deu-com{width:100%; display:block; margin:0 0 6px; box-sizing:border-box;}
+  .deu-obs .btn-guardar-fila{width:100%; display:block; margin:0;}
+  .deu-acc{min-width:200px; vertical-align:middle;}
+  .btn-abono{font-weight:800;}
   .bdg.no{background:#fee2e2; color:#b91c1c;} .bdg.ok{background:#dcfce7; color:#15803d;} .bdg.sm{background:#f1f5f9; color:#64748b;}
   #deuBuscar,#deuFiltro,#deuOrden{padding:8px 10px; border-radius:8px; border:1px solid var(--border); font-size:13px; background:#fff;}
   tr.resaltar td{background:#fde68a !important; transition:background .3s;}
@@ -2554,7 +2558,7 @@ function bajarBlob(blob, nombre){
 // =====================================================================
 // CLIENTES DEUDORES: todos los actores de las complementarias guardadas que no abonaron honorarios
 // =====================================================================
-let deuFiltro = "todos", deuBusqueda = "", deuOrden = "nombre";
+let deuFiltro = "todos", deuBusqueda = "", deuOrden = "nombre", comGuardado = "";
 function listaDeudores(){
   const grupos = new Map();
   compsVivas().forEach(c => c.filas.forEach((f, i) => {
@@ -2637,10 +2641,13 @@ function renderDeudores(){
         <td class="num">${fmtMoney((f.bruto || 0) * 0.15)}</td>
         <td class="num">${fmtMoney((f.bruto || 0) * 0.20)}</td>
         <td>${badgeHon(f.hon)}<br>${badgeCont(f.cont)}</td>
-        <td class="deu-obs">${esc(f.obs || "")}</td>
+        <td class="deu-obs">
+          <textarea class="comentario deu-com" data-com="${esc(c.id)}" data-i="${i}" rows="3" placeholder="Escribí un comentario…">${esc(f.obs || "")}</textarea>
+          <button class="mini btn-guardar-fila" data-guardarcom="${esc(c.id)}" data-i="${i}">${comGuardado === c.id + "|" + i ? "✓ Comentario guardado" : "💾 Guardar comentario"}</button>
+        </td>
         <td class="deu-acc">
           <button class="mini secondary" data-ver="${esc(c.id)}" data-i="${i}">🔎 Ver en la complementaria</button>
-          <button class="mini btn-abono" data-abono="${esc(c.id)}" data-i="${i}">✓ ABONÓ</button>
+          <button class="mini btn-abono" data-abono="${esc(c.id)}" data-i="${i}">PRESIONAR SI ABONÓ</button>
         </td></tr>`).join("")}</tbody></table></div>
     </div>`;
   });
@@ -2653,6 +2660,20 @@ function renderDeudores(){
   cont.querySelector("#deuOrden").addEventListener("change", e => { deuOrden = e.target.value; renderDeudores(); });
   cont.querySelector("#deuPDF").addEventListener("click", () => pdfDeudores(lista));
   cont.querySelectorAll("[data-ver]").forEach(btn => btn.addEventListener("click", () => irAFila(btn.dataset.ver, +btn.dataset.i)));
+  // comentarios: se escriben aca y se guardan con el boton (quedan tambien en la complementaria)
+  cont.querySelectorAll("textarea[data-com]").forEach(ta => ta.addEventListener("input", () => {
+    const b = cont.querySelector(`[data-guardarcom="${CSS.escape(ta.dataset.com)}"][data-i="${ta.dataset.i}"]`);
+    if(b){ b.textContent = "💾 GUARDAR COMENTARIO"; b.classList.add("pendiente"); }
+  }));
+  cont.querySelectorAll("[data-guardarcom]").forEach(btn => btn.addEventListener("click", () => {
+    const c = ARCHIVO[btn.dataset.guardarcom], i = +btn.dataset.i;
+    const ta = cont.querySelector(`textarea[data-com="${CSS.escape(btn.dataset.guardarcom)}"][data-i="${i}"]`);
+    BORRADORES.delete(c.id + "|" + i);
+    c.filas[i] = Object.assign({}, c.filas[i], {obs: ta.value, mod: ahoraMs()});
+    comGuardado = c.id + "|" + i;
+    btn.blur(); guardarArchivo();
+    btn.textContent = "✓ Guardado"; btn.classList.remove("pendiente");
+  }));
   cont.querySelectorAll("[data-abono]").forEach(btn => btn.addEventListener("click", async () => {
     const c = ARCHIVO[btn.dataset.abono], i = +btn.dataset.i, f = c.filas[i];
     if(!(await preguntar(`¿Marcar que ${nombreLindo(f.name)} ABONÓ los honorarios?`, `Complementaria ${c.complementaria}. Sale de la lista de deudores y queda tachado en la complementaria.`, "Sí, abonó"))) return;
