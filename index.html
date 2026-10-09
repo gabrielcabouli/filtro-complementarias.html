@@ -2,6 +2,14 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Complementarias">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#1e3a5f">
+<link rel="apple-touch-icon" href="data:image/png;base64,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">
+<link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAIAAACyr5FlAAAPQElEQVR4nO2da2xV15XH/2vvcx/29b1+4TaZjMpIo3YaBbWVopkPVWdUtVU/jEbql1aafmo16iMP0lTtRKAMpYjm4Q/RyCHEDbQ8JkpCUsIIyAhICkNoYDolJHVIcAIUK455TGLzsI2v7XvP3ms+HN8bEzg3lHvueVyv3yckjO+xz4+9115rnXXoU1/8DgThWqioL0CILyKH4IvIIfgicgi+iByCLyKH4IvIIfgicgi+iByCLyKH4IvIIfgicgi+iByCLyKH4IvIIfgicgi+iByCLyKH4IvIIfgicgi+iByCLyKH4IvIIfgicgi+iByCLyKH4IvIIfgicgi+iByCLyKH4IvIIfgicgi+iByCLyKH4IvIIfgicgi+iByCLyKH4IvIIfgicgi+iByCL06YH0ZEYX5cU8LMoX1WeHIwo1wukxI/bhxm1kqrsH6HIcnBzI7WPV1ds2VX9LghiJkdRxenZ4szsyqUNTgkObRSl4szDy/77j995e9my2VH6fAWx+RDgGGriN47O/bNOx8EgxSFsL+EtXIAjqN/sWbL3//tkr/4ZFc4H9p8rOrrG7s40d7WaqwN4eNCOq0wczaTPvvBhTv+7THXNa5rLAvXS9l1Aaxe88xLv3u9I58LxwyEeZQ1xnS2t738v28+3P8bx9HWWhKuA2ttynG27Tn06Kadi7raXWNCu2Wh5jlc13R3Fvo27di255CjtQnx50woxlqt9fGh0z994NctmTRCPMcigiQYc0sm/dMHfn186LTW2oa1QiYRZiZgeqZ098/6p4ozmXTKNrccljmTTk0VZ+5e2V+cnmUONauTLIy1SqkVj/zHq0dPtOdbw9xQPCJIn7vGtOdzhwdOrOp7SmsVWniVLFxjHK03bf3tumd2L+pqL7sRbMHR1FbKrruoq/CrLS9u2XlAgo+rMdY6Wg8MDq145MnuzoIx0fz/iazwZi3n860/eWD9wOCQ1lrWjyrMrIgujl++a8XjrjFaqah23sjkYGZHKba4c8Xa8ckpojBSfonAWgvQ0pX9b/9ppK21JcL/NlGW7I21uVx28OTI8t5NikgWDwCuMVrrNZt3vLDvcHdnPvwgdD4R93O4rlnUVXh6x8ubtv7W0Tra30XkeKHGoSODD659tqsjH0kQOp/om32MsZ3tbSseefKPx045Czj4sNYrrY1+f/mjKceJQ+k6ejmYWSllmb/7r/8+dmFCEYWc6okDzMyAtXzPz3/5/tilbCYdh19C9HIAsNa2ZjMjZ0fvXb0OIF54i4exViv1UP9z+39/tKO9LSbbayzkAOAa09mRf2HvH9Zs3qEXWPDh5bv2HHitb8P27s6CG3WoUSUucgBwXdPVkX9w7bOHjgwunODDWutofXzo9I9WPdGSzYRcWqtNjOQAQEDKcb6//NH3zo4qoqYvyzEzM4rTs3ev7D9/aTL80lpt4iWHZc5m0u+PXbrn57+0ljncZuvwMdZqrVb1PXV44ERnIS6hRpV4yQHANaajvW3/748+1P+cVs1cljPGOFpv2XngV1teXNRV8Nq9YkXs5EC1J2jD9j0HXmvWzJjXxTMwOPSTB9bn863WxnGBjKMcAMDcks38aNUTx4dOO03XE+SV1sYnp+5csZYtnOhKa7WJqRxeT9D5S5NzPUHNFXwYawFa1rtp8ORILpeN7dYZUzngZT4KbYcHTqzqe7qZgg8vq7Fm846ntu/v6YpRVuNq4isHKj1B67fsfn7XweYIPrzS2sEjgw+ufbansxB5aa02sZYDXk9QrvW+hze8+c67SQ8+LLMiOn9xcunKfq01Yv9YedzlYOZUSk8VZ39w/5rxySIS2xPkPZ5kLX9vWd/IubGWbCb+osddDgDG2EJb6+DJkeW9G5PbE1Qtre09NNBRyCWibTYBcqASfCS3J2h+aW1RV3ucg9D5JEMOzOsJGhgcSlZZLs6ltdokRg5m1kq5xty14vGL45dVQoKPmJfWapMYOQAYa9taW97+08jSlf1AMmq2MS+t1SZJcgBwjenuzL+w73AieoLiX1qrTcLkAFCu9AQdjHdPUCJKa7VJnhwAiEhrvXRl//mLk/FsSE5Kaa02iZTDWtuSzYycG/vesj5bGREU9UVdQVJKa7VJpBwAjDEdhdzeQwMx7AlKUGmtNkmVA3NPy7X3bdi+58CR+GTGklVaq02C5QAA5mw2/ePV60fOjcWhLJe40lptki2HZc6k02MXJ354/2OR9wQlsbRWm2TLAS/4yLe9cvityHuCklhaq03i5QBQdt1PdHdE2xNUKa0dSVZprTbNIAcAY20+13rfQxu8huSQ1w+vtDZybuzHq9dns2EPhGwcTSIHM6dSzuXizF0/6x+fLFKIwYeXYylOz/7w/sfGLk5k0rF4QD4QmkQOAMYbUvjG8eW9G1WIwYcXaqzqe/qVw2915NuaINSo0jxyACi77ie7O8PsCfJCjed3HVy/ZfcnujsSV1qrTVPJAe+BhrB6grxQ48133r3v4Q35XEhvMgiTZpOj2hPkDSlsXE8QM4NofLL4g/vXTBVnUykdt/pO/TSbHPB6gnItgydHlvVuAhrVkGysVUTLejcOnhwptLVGNUe2oTShHABc1/R0FZ7avn/N5h2NCD68UGPjb156ZsfLSeziuU6aUw4AZdf0dBYa0RNULa0t693U1ZFvjnzXNWlaOQCg0hM0dmFCKxVI+sEya6XGLkwsXdmfcjQlvLRWm2aWwxtSOHzmg3tXryuV3GASl8ylknvv6nXDZz5ogtJabZpZDsydbPO79r/6+rFT9WfGvBegvH7s1K79r3a2Rzx7OgSaXA54mXXHCfA0YYxNOU7zHVyvpvnlgPc+rOBiA6KmmiRTgwUhh3BjiByCLyKH4EtIrysXrpf5sVHUgY3IETU0TwgDzD8dK0BX/swRuCJyRITnBANloAQAUEArqG2ujExEPM0oAt4ZPA2kKv8kLEtEjtAhQAElYAbIgHqIFpP6rKKbidqJOmnOBgW+yDzOfI7tO5aHmUcZs0AWSAM2DEVEjnDRQBm4DPRAf1nrL2m6hVAAFGABFzCVXYZBeSKHcDv0P2pMgM+wOWjMawajQAuQunIPagAiR1h4t3wCtIj0N7T6iqIegguUgKkrv6aKAWYrf06D/oac2xw9qu1/W7PX8BijDUADlxCRIxQUUAZc6K9p55sObgKKwERli6mRT6jqwsA0wKA20v+s9Ze1+7xrXjZwgFQlLgkakaPxaKAI5JH6l5T+B81FxviVJ5HrxHPIAONAO1L3pNTnVXljGZNAa0O2GJGjwWhgEvQZSi1Nqb9UfIlvRIv5EKABF3yJ9Zc0/RWV15b5BCMfvB+SIW0kFTPSy9N0E/EEQ18VWNwYBGjwBNNNlF6eps8QJutz7lqIHA1DAVNzZqAVKAZ/8+Y2rFbM+TEV8P0UORqDAmZBN1fMmG2AGR4amK34cTNhNshbKnI0AAIsoJC6I4U8MNPgX7MCZoA8Unek5vIlATWviBwNgIApON92aAlhqmFrxnw0MAVaQs63HUyJHLFFAdOgW0l/XeNyiL9gBVyG/rqmWwnTwXyuyBE0DADOtxyk5+XCQ4AAA6ThfMupXkadiByBooBpqC8otUQ15HhSGw0UoZYo9QUVyOIhcgQNQ39VQ0fUqsOAhv6qlpUjZhAwC1pM6jbV8BOKHwqYgbpN0WLCbL2bmsgRHApcYv05TQVChE9Wu6AC6c9pLnGdt1fkCA4GKaJPExsOLw69GgIbpk8TKapzcxE5AoIAFyhALVYoh3hIueaVlKEWKxQAt64rETkCgoAy6BZCT723JIArcYEe0C1Up6YiR3AwKEdwon+kAAw4oJxsKzGBwC6rxYo0Nagv68/AgjSpxYrduqIfkSNQnEg3lPlQAI1cIkegRL6hzKfuixE5AiUmy4ZH3RcjcgSKG5vFg1F/Ik7kCAgGOWSHLZt685IBoMCG7bAlp64DS+Q/RxNB4CmOOMlRuRK44Kl6E7UiR0AwkAKfYYwi4lQHAw4wCj7DSNV1JSJHQHi3ZAJ22NZ5SwK4khTssMVEvZqKHH8ezOw7r5LAlvkkk643NVkXDNLEJ5mtbCthwczGWCJqz+euPUzQgtJkjhqe4CifJHTAE2yOGkrXm6sVOT6eqhbplDN2cWLrrlccra4xD5mBDHiY7TGLbKMebv4YLJCFPWZ5mJGpd3eTZ2Vr4b0nVmulNY1dmNi8be+T2/aePne+kG/1naROMPuMul1Fc2YhwMDsM4F8ushxba6lxb7hMx+05bId7TnfecgWaIEdsPYtqz6vcDncHmMDtMG+Ye2ARUsAS5fI8VFqaLGos2Cs/ZhJ2QQA7lY3fWt6rs04nCWEAQ2U4G515y6j7qBY5LgCY2wNLa5rEr4FWsBvs3nJ6G9ojIe1eFigHWaH4bcZ+WAiHpEDABiwc1qoG9di/rfLwd3iqr9W9NlQnog0QA78FrtbXOQCy7IsdDnma1F23cef/K8Nz7303tnRG9Si+k0VUEb5iXL6F5Wn7Bt3LrRAFphE+YkybJBToBauHB/RYtvuQ+ue2f3HY6dyLXVoUcUCGfA5LvWW5qYwzDRm/TBAFiii1Fvic4zWII/QC1EOHy2GMmmnu6NuLapYIAc+UfGjrQHzWwzQClxGqbfUiMlPC0sO/jDk/KgWXR155oC0qGKA/JwfczPBJhgqiPMLAxZUIHvaNm4m2AKSwxirCMpHi0a9g97z4xSXVpY+nCZYwo0rwoAF0qBWMr8zc9MEG2AGFo4cRKS1KpXK//niKyFpUcUALcA0yo+W7Rv2wzmk5coc0uvEzlVckQf+D+UN5bk5pC2NGmXc/HIwg4hcY3bu/cMj67cdfefd8LSoYgEHcGD2Gjtg9deunGBcvYqr15LqoVQDLYADHmW788oJxg0r4tCnvvidRn3v2EBE3Z2F4dPvK6Xaci3M1tqIaure7PNpoAf69o+ZfQ4NOJW/imL2+YKQA0DZNZl0CuDItKgib02IG+mUE5cXBDNgAAfIAwweZT7D9n/s3PtWWmq+byVd+eehsFDkiN3LPqvv1PFuuYcBT3Dl79nT5YqvD/eHWChyxJf5t/wjzzByRB1DFUSOmBGnBU7aBAVfRA7BF5FD8EXkEHwROQRfRA7BF5FD8EXkEHwROQRfRA7BF5FD8EXkEHwROQRfRA7BF5FD8EXkEHwROQRfRA7BF5FD8EXkEHwROQRf/h+oj0/HyGDqzAAAAABJRU5ErkJggg==">
 <title>Filtro de Clientes - Complementaria CRJPPF</title>
 <style>
   :root{
@@ -61,7 +69,7 @@
   .chk{display:flex; align-items:center; gap:6px; font-size:10.5px; font-weight:800; padding:3px 6px; border-radius:5px; margin:2px 0; cursor:pointer; white-space:normal; line-height:1.15; width:150px;}
   .chk.ok{color:#15803d; background:#dcfce7; border:1px solid #86efac;} .chk.ok input{accent-color:#16a34a;}
   .chk.no{color:#b91c1c; background:#fee2e2; border:1px solid #fca5a5;} .chk.no input{accent-color:#dc2626;}
-  tr.pagado td:not(.estado), tr.pagado td:not(.estado) input, tr.pagado td:not(.estado) textarea{text-decoration:line-through; text-decoration-thickness:2px;}
+  tr.pagado td:not(.estado):not(.col-num), tr.pagado td:not(.estado):not(.col-num) input, tr.pagado td:not(.estado):not(.col-num) textarea{text-decoration:line-through; text-decoration-thickness:2px;}
   tr.pagado td:not(.estado){opacity:.6;}
   tr.pagado td{background:#ecfdf3 !important;}
   /* barra verde con "ABONÓ" vertical: honorarios abonados */
@@ -99,7 +107,54 @@
   .modal label{display:block; font-size:12px; font-weight:700; color:var(--muted); margin-top:10px;}
   .modal label input{display:block; width:100%; margin-top:4px; padding:9px 10px; border:1px solid var(--border); border-radius:8px; font-size:14px;}
   .modal ol{font-size:13px; line-height:1.6; padding-left:20px;}
+  table.hist td{padding:8px 10px;} table.hist{margin:8px 0;}
   .cfg-msg{margin-top:10px; font-weight:600; min-height:18px;}
+
+  /* ---------- Celular (iPhone) ---------- */
+  @media (max-width: 760px){
+    body{padding:12px 10px calc(16px + env(safe-area-inset-bottom));}
+    h1{font-size:19px; line-height:1.25;}
+    .sub{font-size:12.5px;}
+    .panel{padding:14px 12px; border-radius:10px;}
+    .tabs{overflow-x:auto; gap:4px; -webkit-overflow-scrolling:touch;}
+    .tab{padding:9px 10px; font-size:12.5px; white-space:nowrap;}
+    #btnBloquear{padding:6px 8px;}
+    button{padding:10px 14px; font-size:14px;}
+    input[type=file]{min-width:0; width:100%;}
+    .stat{gap:8px;} .stat div{min-width:0; flex:1 1 44%; padding:8px 10px;} .stat .n{font-size:20px;}
+    .fecha-row input{width:100%;}
+    .arch-top .row{width:100%;} #archBuscar{width:100% !important;}
+    .arch-anio-h{font-size:17px;}
+    .arch-comp{padding:10px;}
+    .arch-comp-h{gap:8px;}
+    .arch-comp-h > *{flex:1 1 100%;}
+    .arch-fecha{width:100%;}
+    .ver-btn{width:100%; padding:12px; font-size:14px;}
+    .tablewrap{max-height:70vh; -webkit-overflow-scrolling:touch;}
+    .chk{width:135px; font-size:10.5px; padding:6px;}
+    .chk input{width:20px; height:20px;}
+    .modal{padding:18px;}
+    input, textarea, select{font-size:16px !important;}   /* evita que el iPhone haga zoom al escribir */
+  }
+  .col-num{min-width:118px;}
+  .btn-compartir{display:block; margin:6px 0 0 auto; background:#0f766e; color:#fff; font-size:10px; font-weight:800; padding:6px 8px; border-radius:6px; line-height:1.2; white-space:normal; width:108px; text-align:center;}
+  tr.pagado td:first-child .btn-compartir{text-decoration:none;}
+  .btn-wa{background:#16a34a;}
+  .comp-datos{border:1px solid var(--border); border-radius:10px; overflow:hidden; margin:10px 0 14px;}
+  .comp-datos div{display:flex; justify-content:space-between; gap:10px; padding:9px 12px; border-bottom:1px solid var(--border); font-size:14px;}
+  .comp-datos div:last-child{border-bottom:none;}
+  .comp-datos span{color:var(--muted);}
+  .comp-juicio{border:1px solid #bfdbfe; background:#eff6ff; border-radius:10px; padding:10px 12px; margin-bottom:12px;}
+  .modal .comp-juicio label{margin-top:6px;}
+  .modal .comp-juicio label.opt-juicio{display:flex; gap:8px; align-items:flex-start; font-size:12.5px; font-weight:600; color:#1e293b; padding:6px 8px; border-radius:6px; cursor:pointer;}
+  .modal .comp-juicio label.opt-juicio.sel{background:#dbeafe;}
+  .modal .comp-juicio label.opt-juicio input{display:inline-block; width:18px; height:18px; margin:2px 0 0; flex:0 0 auto;}
+  .comp-pct{background:#fffbeb; border:1px solid #fcd34d; border-radius:10px; padding:10px 12px;}
+  .comp-pct-t{font-size:13px; font-weight:700; color:#92400e; margin-bottom:6px;}
+  .comp-pct label{display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:8px; cursor:pointer; font-size:15px;}
+  .comp-pct label.sel{background:#fde68a;}
+  .modal .comp-pct label{display:flex; justify-content:flex-start; margin-top:4px; color:#1e293b; font-size:15px; font-weight:400;}
+  .modal .comp-pct label input{display:inline-block; width:20px; height:20px; margin:0; padding:0; flex:0 0 auto;}
   .fechas-panel{margin:10px 0 14px; display:flex; flex-direction:column; gap:8px;}
   .fecha-row{display:flex; gap:10px; align-items:center; flex-wrap:wrap; background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:8px 12px; font-size:13px;}
   .fecha-row input{width:260px; text-align:center; font-weight:700; padding:6px 8px; border-radius:6px; border:1px solid var(--border);}
@@ -1908,7 +1963,7 @@ function _renderArchivo(cont){
       <div id="archEstado" class="arch-estado"></div>
       <div class="row" style="gap:8px;">
         <span id="syncEstado" class="sync-estado">${SYNC.textoEstado()}</span>
-        ${SYNC.configurado() ? '<button class="secondary mini" id="syncAhora">🔄 Actualizar ahora</button>' : ''}
+        ${SYNC.configurado() ? '<button class="secondary mini" id="syncAhora">🔄 Actualizar ahora</button><button class="secondary mini" id="syncHist">🕘 Historial</button>' : ''}
         <button class="secondary mini" id="syncConfig">☁️ ${SYNC.configurado() ? "Sincronización" : "Configurar sincronización entre PC"}</button>
       </div>
     </div>
@@ -1954,7 +2009,8 @@ function _renderArchivo(cont){
             const f = borrador || fGuardada;
             const pag = f.hon === "abono" ? " pagado" : "";
             html += `<tr class="arch-fila${pag}${borrador ? " sin-guardar" : ""}" data-id="${esc(c.id)}" data-i="${i}">
-              <td class="num">${f.dudoso ? '<span class="verif">VERIFICAR</span> ' : ''}${filas.findIndex(x => x.i === i) + 1}</td>
+              <td class="num col-num">${f.dudoso ? '<span class="verif">VERIFICAR</span> ' : ''}${filas.findIndex(x => x.i === i) + 1}
+                <button class="btn-compartir" data-compartir="1" title="Genera un PDF con la liquidación para mandarle al cliente">📄 PARA COMPARTIR AL CLIENTE</button></td>
               <td><input data-f="docnum" value="${esc(f.docnum)}" style="width:85px;"></td>
               <td><textarea data-f="name" rows="2" style="width:150px;">${esc(f.name)}</textarea></td>
               <td><textarea data-f="telefono" rows="${Math.max(1, phoneLines(f.telefono).length)}" style="width:125px;">${esc(phoneLines(f.telefono).join("\n"))}</textarea>
@@ -2000,6 +2056,7 @@ function conectarArchivo(cont){
   cont.querySelector("#archExport").addEventListener("click", exportarArchivo);
   cont.querySelector("#syncConfig").addEventListener("click", () => SYNC.abrirConfig());
   const sa = cont.querySelector("#syncAhora"); if(sa) sa.addEventListener("click", () => SYNC.sincronizar(true));
+  const sh = cont.querySelector("#syncHist"); if(sh) sh.addEventListener("click", () => SYNC.abrirHistorial());
   cont.querySelector("#archImportBtn").addEventListener("click", () => cont.querySelector("#archImport").click());
   cont.querySelector("#archImport").addEventListener("change", importarArchivo);
 
@@ -2074,6 +2131,7 @@ function conectarArchivo(cont){
       f[k] = chk.checked ? chk.dataset.v : "";   // las dos opciones de cada grupo se excluyen entre si
       renderArchivo();
     }));
+    tr.querySelector("[data-compartir]").addEventListener("click", () => abrirCompartir(c, BORRADORES.get(clave) || c.filas[i]));
     tr.querySelector("[data-guardarfila]").addEventListener("click", () => {
       if(BORRADORES.has(clave)){
         c.filas[i] = Object.assign(BORRADORES.get(clave), { mod: ahoraMs() }); BORRADORES.delete(clave);
@@ -2090,6 +2148,159 @@ function conectarArchivo(cont){
         guardarArchivo(); renderArchivo(); }
     });
   });
+}
+
+// =====================================================================
+// PDF PARA COMPARTIR AL CLIENTE (liquidacion individual)
+// =====================================================================
+// Interpreta una caratula tipo: (2140) JUZG. 7 SS. "AGUADO, RAMON ABELARDO Y O." 26765/2015-451
+function leerCaratula(txt){
+  const t = (txt || "").trim();
+  const m = /^\(([^)]+)\)\s*JUZG\.?\s*(\d+)\s*S\.?S\.?\s*"([^"]+)"?\s*(.*)$/i.exec(t);
+  if(!m) return {decreto: "", juicio: t, juzgado: "", expte: "", texto: t};
+  const cod = m[1].toUpperCase().replace(/\s+/g, "");
+  let decreto = cod;
+  if(cod === "2140" || cod === "2140/13") decreto = "Decreto 2140/13";
+  else if(cod === "380/17" || cod === "380") decreto = "Decreto 380/17";
+  else if(cod.includes("2744")) decreto = "Decreto 2744/93" + (cod.includes("N.B") ? " y N.B." : "");
+  const juicio = m[3].replace(/\s+Y\s+O(TROS?)?\.?\s*$/i, " Y OTROS").replace(/\s+Y\s+OTRO\.?\s*$/i, " Y OTRO").trim();
+  const ex = /^(\d+\/\d+)/.exec((m[4] || "").trim());
+  return {decreto, juicio, juzgado: "Juzgado de la Seguridad Social N° " + m[2], expte: ex ? ex[1] : "", texto: t};
+}
+function nombreLindo(n){ return (n || "").replace(/\s*,\s*/, ", ").replace(/\s+/g, " ").trim(); }
+function generarPDFCliente(c, f, pct, jui){
+  jui = jui || {};
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({orientation: "portrait", unit: "pt", format: "a4"});
+  const W = doc.internal.pageSize.getWidth(), M = 50;
+  const bruto = f.bruto || 0, desc = f.desc || 0, neto = f.neto || 0, hon = bruto * pct / 100;
+  // encabezado
+  doc.setFillColor(30,58,95); doc.rect(0, 0, W, 92, "F");
+  doc.setTextColor(255,255,255); doc.setFont(undefined, "bold"); doc.setFontSize(17);
+  doc.text("ESTUDIO JURÍDICO GÜNSBERG - LAMEDICA - CABOULI", W/2, 40, {align: "center"});
+  doc.setFont(undefined, "normal"); doc.setFontSize(10.5);
+  doc.text("Abogados especialistas en juicios de PFA - Mutual de Suboficiales", W/2, 60, {align: "center"});
+  doc.setFontSize(9); doc.text("Tel. 4345-5532 / 4345-3354 · Lunes a jueves de 16 a 19 hs", W/2, 77, {align: "center"});
+  // titulo
+  doc.setTextColor(30,58,95); doc.setFont(undefined, "bold"); doc.setFontSize(15);
+  doc.text("DETALLE DE LIQUIDACIÓN", W/2, 135, {align: "center"});
+  doc.setFont(undefined, "normal"); doc.setFontSize(10.5); doc.setTextColor(90,100,115);
+  const sub = [c.complementaria ? "Complementaria " + c.complementaria : "", f.fechaPago || c.fechaPago ? "Fecha de pago: " + (f.fechaPago || c.fechaPago) : ""].filter(Boolean).join("   ·   ");
+  if(sub) doc.text(sub, W/2, 153, {align: "center"});
+  // datos del cliente
+  doc.autoTable({
+    startY: 180, margin: {left: M, right: M}, theme: "plain",
+    styles: {fontSize: 12, cellPadding: {top: 7, bottom: 7, left: 10, right: 10}, textColor: [30,41,59]},
+    columnStyles: {0: {fontStyle: "bold", cellWidth: 150, textColor: [100,116,139]}},
+    body: [["Nombre completo", nombreLindo(f.name)], ["DNI", ((f.doctype ? f.doctype + " " : "") + (f.docnum || "")).trim()]]
+      .concat(jui.juicio ? [["Juicio", jui.juicio + (jui.expte ? "  ·  Expte. N° " + jui.expte : "")]] : [])
+      .concat(jui.juzgado ? [["Juzgado", jui.juzgado]] : [])
+      .concat(jui.decreto ? [["Decreto", jui.decreto]] : []),
+    didParseCell: d => { d.cell.styles.lineWidth = {bottom: 0.6}; d.cell.styles.lineColor = [213,220,230]; }
+  });
+  // importes
+  const filas = [
+    ["Importe bruto", fmtMoney(bruto)],
+    ["Descuentos", "- " + fmtMoney(desc)],
+    ["Importe neto (depositado en su cuenta)", fmtMoney(neto)],
+    [`Honorarios profesionales (${pct}% del importe bruto)`, fmtMoney(hon)],
+  ];
+  doc.autoTable({
+    startY: doc.lastAutoTable.finalY + 26, margin: {left: M, right: M}, theme: "grid",
+    head: [["Concepto", "Importe"]], body: filas,
+    headStyles: {fillColor: [30,58,95], textColor: 255, fontStyle: "bold", fontSize: 11.5, halign: "left"},
+    styles: {fontSize: 12.5, cellPadding: 10, lineColor: [213,220,230], lineWidth: 0.6, textColor: [30,41,59]},
+    columnStyles: {1: {halign: "right", cellWidth: 170, fontStyle: "bold"}},
+    didParseCell: d => {
+      if(d.section === "head" && d.column.index === 1) d.cell.styles.halign = "right";
+      if(d.section === "body" && d.row.index === 3){ d.cell.styles.fillColor = [254,243,199]; d.cell.styles.fontStyle = "bold"; d.cell.styles.fontSize = 13.5; d.cell.styles.textColor = [120,53,15]; }
+      if(d.section === "body" && d.row.index === 2){ d.cell.styles.fillColor = [236,253,243]; }
+    }
+  });
+  let y = doc.lastAutoTable.finalY + 30;
+  doc.setFont(undefined, "normal"); doc.setFontSize(10.5); doc.setTextColor(71,85,105);
+  const nota = doc.splitTextToSize(`Los honorarios profesionales corresponden al ${pct}% del importe bruto liquidado por la Caja de Retiros, Jubilaciones y Pensiones de la Policía Federal. Una vez corroborado el depósito, le solicitamos comunicarse con nuestras oficinas.`, W - 2*M);
+  doc.text(nota, M, y);
+  doc.setFontSize(8.5); doc.setTextColor(148,163,184);
+  doc.text("Generado el " + new Date().toLocaleDateString("es-AR"), M, doc.internal.pageSize.getHeight() - 30);
+  const archivo = `Liquidacion_${nombreLindo(f.name).replace(/[^A-Za-zÁÉÍÓÚÑáéíóúñ0-9]+/g, "_").replace(/^_|_$/g, "")}_${(c.complementaria||"").replace(/\//g,"-")}.pdf`;
+  return {blob: doc.output("blob"), archivo};
+}
+
+function abrirCompartir(c, f){
+  let pct = 15;
+  const caratulas = (f.caratula || "").split("||").map(x => x.trim()).filter(Boolean).map(leerCaratula);
+  let sel = 0;
+  let jui = caratulas[0] ? {...caratulas[0]} : {decreto: "", juicio: "", juzgado: "", expte: ""};
+  const tel = telefonosUnicos(f.telefono).find(x => x.a.link && !x.a.dudoso) || telefonosUnicos(f.telefono).find(x => x.a.link);
+  const m = document.createElement("div");
+  m.className = "modal-fondo";
+  const pintar = () => {
+    const bruto = f.bruto || 0;
+    m.innerHTML = `<div class="modal" style="width:520px;">
+      <h3>📄 Para compartir al cliente</h3>
+      <div class="comp-datos">
+        <div><span>Nombre completo</span><b>${esc(nombreLindo(f.name))}</b></div>
+        <div><span>DNI</span><b>${esc(((f.doctype ? f.doctype + " " : "") + (f.docnum || "")).trim())}</b></div>
+        <div><span>Importe bruto</span><b>${fmtMoney(bruto)}</b></div>
+        <div><span>Descuentos</span><b>- ${fmtMoney(f.desc || 0)}</b></div>
+        <div><span>Importe neto</span><b>${fmtMoney(f.neto || 0)}</b></div>
+      </div>
+      <div class="comp-juicio">
+        ${caratulas.length > 1 ? `<div class="comp-pct-t" style="color:#1e3a5f;">Este cliente tiene ${caratulas.length} juicios: elegí cuál corresponde a este pago</div>
+          ${caratulas.map((k, j) => `<label class="opt-juicio ${j===sel?"sel":""}"><input type="radio" name="jui" value="${j}" ${j===sel?"checked":""}> ${esc(k.texto)}</label>`).join("")}` :
+          caratulas.length ? "" : `<div class="comp-pct-t" style="color:#b45309;">Este actor no tiene carátula cargada: completá el juicio y el decreto a mano.</div>`}
+        <label>Juicio<input data-j="juicio" value="${esc(jui.juicio)}"></label>
+        <div class="row" style="gap:8px; align-items:flex-end;">
+          <label style="flex:1;">Expte. N°<input data-j="expte" value="${esc(jui.expte)}"></label>
+          <label style="flex:1;">Decreto<input data-j="decreto" value="${esc(jui.decreto)}" list="listaDecretos"></label>
+        </div>
+        <label>Juzgado<input data-j="juzgado" value="${esc(jui.juzgado)}"></label>
+        <datalist id="listaDecretos"><option value="Decreto 2140/13"><option value="Decreto 380/17"><option value="Decreto 2744/93"></datalist>
+      </div>
+      <div class="comp-pct">
+        <div class="comp-pct-t">Honorarios profesionales (sobre el importe bruto):</div>
+        <label class="${pct===15?"sel":""}"><input type="radio" name="pct" value="15" ${pct===15?"checked":""}> <b>15%</b> = ${fmtMoney(bruto*0.15)}</label>
+        <label class="${pct===20?"sel":""}"><input type="radio" name="pct" value="20" ${pct===20?"checked":""}> <b>20%</b> = ${fmtMoney(bruto*0.20)}</label>
+      </div>
+      <div class="actions" style="justify-content:flex-end;">
+        <button class="secondary" data-a="cerrar">Cancelar</button>
+        <button class="secondary" data-a="bajar">⬇ Descargar PDF</button>
+        <button class="btn-wa" data-a="wa">📲 Compartir por WhatsApp</button>
+      </div>
+      <div class="muted" style="font-size:12px; margin-top:8px;">${tel ? "WhatsApp del cliente: " + esc(tel.a.display) : "El cliente no tiene celular cargado: vas a poder elegir el contacto en WhatsApp."}</div>
+    </div>`;
+    m.querySelectorAll('input[name="pct"]').forEach(r => r.addEventListener("change", () => { pct = +r.value; pintar(); }));
+    m.querySelectorAll('input[name="jui"]').forEach(r => r.addEventListener("change", () => { sel = +r.value; jui = {...caratulas[sel]}; pintar(); }));
+    m.querySelectorAll('[data-j]').forEach(inp => inp.addEventListener("input", () => { jui[inp.dataset.j] = inp.value; }));
+    m.querySelector('[data-a="cerrar"]').addEventListener("click", () => m.remove());
+    m.querySelector('[data-a="bajar"]').addEventListener("click", () => { const {blob, archivo} = generarPDFCliente(c, f, pct, jui); bajarBlob(blob, archivo); });
+    m.querySelector('[data-a="wa"]').addEventListener("click", async () => {
+      const {blob, archivo} = generarPDFCliente(c, f, pct, jui);
+      const file = new File([blob], archivo, {type: "application/pdf"});
+      const texto = `Estimado/a ${nombreLindo(f.name)}: le enviamos el detalle de la liquidación de su juicio` +
+        (jui.juicio ? ` "${jui.juicio}"` : "") + (jui.expte ? ` (Expte. N° ${jui.expte})` : "") +
+        (jui.decreto ? `, ${jui.decreto}` : "") +
+        (c.complementaria ? `, complementaria ${c.complementaria}` : "") + `. Estudio Jurídico Günsberg - Lamedica - Cabouli.`;
+      // En iPhone / celular / Chrome: menu de compartir del sistema con el PDF adjunto (se elige WhatsApp)
+      if(navigator.canShare && navigator.canShare({files: [file]})){
+        try{ await navigator.share({files: [file], title: archivo, text: texto}); return; }
+        catch(e){ if(e.name === "AbortError") return; }
+      }
+      // Si el navegador no puede adjuntar: se descarga el PDF y se abre el chat del cliente para adjuntarlo
+      bajarBlob(blob, archivo);
+      const link = tel ? tel.a.link + "?text=" + encodeURIComponent(texto) : "https://wa.me/?text=" + encodeURIComponent(texto);
+      window.open(link, "_blank");
+      alert("Se descargó el PDF y se abrió WhatsApp: adjuntá el archivo " + archivo + " en el chat (clip 📎).");
+    });
+  };
+  pintar();
+  m.addEventListener("click", e => { if(e.target === m) m.remove(); });
+  document.body.appendChild(m);
+}
+function bajarBlob(blob, nombre){
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = nombre;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
 
 // Ventana de confirmacion propia (bien visible; no depende de los avisos del navegador)
@@ -2458,7 +2669,71 @@ const SYNC = (() => {
     });
   }
 
-  return {iniciar, sincronizar, programarSubida, configurado, textoEstado, abrirConfig, pintar};
+  // ---------- Historial de versiones (cada guardado en la nube queda como una version) ----------
+  async function abrirHistorial(){
+    if(!configurado()){ alert("Primero hay que configurar la sincronización."); return; }
+    const m = document.createElement("div");
+    m.className = "modal-fondo";
+    m.innerHTML = `<div class="modal"><h3>🕘 Historial de versiones</h3>
+      <p class="muted">Cada vez que alguien guarda, queda una versión. Si algo se borró o se modificó por error, podés volver a una versión anterior: el archivo de todas las PC vuelve a quedar como estaba en ese momento.</p>
+      <div id="histLista">Cargando…</div>
+      <div class="actions" style="justify-content:flex-end;"><button class="secondary" id="histCerrar">Cerrar</button></div></div>`;
+    document.body.appendChild(m);
+    m.querySelector("#histCerrar").addEventListener("click", () => m.remove());
+    const lista = m.querySelector("#histLista");
+    try{
+      const r = await api(`/commits?sha=${encodeURIComponent(cfg.branch)}&path=${encodeURIComponent(cfg.path)}&per_page=40`);
+      if(!r.ok) throw new Error("GitHub respondió " + r.status);
+      const commits = await r.json();
+      if(!commits.length){ lista.textContent = "Todavía no hay versiones guardadas."; return; }
+      lista.innerHTML = `<table class="hist"><thead><tr><th>Fecha y hora</th><th></th></tr></thead><tbody>${
+        commits.map((c, i) => `<tr><td>${new Date(c.commit.author.date).toLocaleString("es-AR", {dateStyle: "short", timeStyle: "medium"})}${i === 0 ? " <b>(actual)</b>" : ""}</td>
+          <td>${i === 0 ? "" : `<button class="mini" data-rest="${c.sha}">Volver a esta versión</button>`}</td></tr>`).join("")
+      }</tbody></table>`;
+      lista.querySelectorAll("[data-rest]").forEach(b => b.addEventListener("click", async () => {
+        const fila = b.closest("tr").firstElementChild.textContent;
+        if(!(await preguntar("¿Volver a la versión del " + fila + "?",
+          "Las complementarias de todas las PC quedan exactamente como estaban en ese momento. Lo que se haya cambiado después se pierde (antes, si querés, bajá una Copia de seguridad).",
+          "Sí, volver a esa versión"))) return;
+        b.disabled = true; b.textContent = "Restaurando…";
+        try{
+          await restaurarVersion(b.dataset.rest);
+          m.remove(); renderArchivo(); alert("Listo: se restauró la versión del " + fila + ".");
+        }catch(e){ b.disabled = false; b.textContent = "Volver a esta versión"; alert("No se pudo restaurar: " + e.message); }
+      }));
+    }catch(e){ lista.textContent = "⚠️ No se pudo leer el historial: " + e.message; }
+  }
+  async function restaurarVersion(commitSha){
+    const r = await api(`/contents/${encodeURIComponent(cfg.path)}?ref=${commitSha}`);
+    if(!r.ok) throw new Error("GitHub respondió " + r.status);
+    const j = await r.json();
+    let txt = (j.content && j.encoding === "base64") ? atob(j.content.replace(/\n/g, ""))
+      : await (await api(`/contents/${encodeURIComponent(cfg.path)}?ref=${commitSha}`, {accept: "application/vnd.github.raw+json"})).text();
+    const vieja = JSON.parse(await desencriptarTexto(CLAVE_SESION, JSON.parse(txt)));
+    migrarArchivo(vieja);
+    // todo lo restaurado pasa a ser "lo mas nuevo", asi gana en todas las PC;
+    // lo que no existia en esa version queda marcado como eliminado
+    const ms = Date.now();
+    Object.values(vieja).forEach(c => { c.mod = ms; (c.filas || []).forEach(f => f.mod = ms); });
+    Object.keys(ARCHIVO).forEach(id => {
+      if(!vieja[id]) vieja[id] = {id, complementaria: ARCHIVO[id].complementaria, anio: ARCHIVO[id].anio, fechaPago: ARCHIVO[id].fechaPago, borrado: true, mod: ms, filas: []};
+      else {
+        const ks = new Set(vieja[id].filas.map(f => f._k));
+        (ARCHIVO[id].filas || []).forEach(f => { if(!ks.has(f._k)) vieja[id].filas.push(Object.assign({}, f, {borrado: true, mod: ms})); });
+      }
+    });
+    BORRADORES.clear();
+    ARCHIVO = vieja; _desdeNube = true; guardarArchivo();
+    // se sube directamente (sin combinar) para que quede igual a la version elegida
+    for(let i = 0; i < 4; i++){
+      const actual = await api(`/contents/${encodeURIComponent(cfg.path)}?ref=${encodeURIComponent(cfg.branch)}`);
+      shaRemoto = actual.ok ? (await actual.json()).sha : null;
+      if(await subir() === "ok") break;
+    }
+    estado = "ok"; ultimo = new Date(); pintar();
+  }
+
+  return {iniciar, sincronizar, programarSubida, configurado, textoEstado, abrirConfig, pintar, abrirHistorial};
 })();
 
 </script>
