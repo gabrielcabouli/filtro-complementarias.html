@@ -153,6 +153,17 @@
   .copia-msg{margin-top:10px; font-size:13px; border-radius:8px;}
   .copia-msg.ok{background:#ecfdf3; color:#166534; padding:8px 10px; border:1px solid #86efac;}
   .copia-msg.no{background:#fff7ed; color:#9a3412; padding:8px 10px; border:1px solid #fdba74;}
+  .elige-cont{display:flex; gap:12px; margin-bottom:8px;}
+  .elige-cont button{flex:1; padding:16px 10px; font-size:15px; font-weight:800; border-radius:10px; line-height:1.3;}
+  .elige-cont small{display:block; font-weight:500; font-size:11.5px; margin-top:4px; opacity:.9;}
+  .btn-concont{background:#ea580c;} .btn-sincont{background:#16a34a;}
+  .comp-cont{border:1px solid var(--border); border-radius:10px; padding:8px 12px; margin:12px 0; display:flex; flex-direction:column; gap:2px;}
+  .modal .comp-cont label{padding:7px 8px; border-radius:8px; cursor:pointer;}
+  .modal .comp-cont label.sel{background:#fed7aa;}
+  .comp-cont.si{background:#fff7ed; border-color:#fdba74;}
+  .modal .comp-cont label{display:flex; align-items:center; gap:6px; margin:0; color:#1e293b; font-size:14px; font-weight:400;}
+  .modal .comp-cont label input{display:inline-block; width:18px; height:18px; margin:0;}
+  .comp-cont-txt{flex:1 1 100%; font-size:12.5px; color:#7c2d12; margin-top:4px; line-height:1.4; text-align:justify;}
   .comp-pct{background:#fffbeb; border:1px solid #fcd34d; border-radius:10px; padding:10px 12px;}
   .comp-pct-t{font-size:13px; font-weight:700; color:#92400e; margin-bottom:6px;}
   .comp-pct label{display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:8px; cursor:pointer; font-size:15px;}
@@ -2243,6 +2254,58 @@ function leerCaratula(txt){
   return {decreto, juicio, juzgado: "Juzgado de la Seguridad Social N° " + m[2], expte: ex ? ex[1] : "", texto: t};
 }
 function nombreLindo(n){ return (n || "").replace(/\s*,\s*/, ", ").replace(/\s+/g, " ").trim(); }
+// Texto con partes en negrita, partido en renglones y justificado
+// Cada "palabra" es una lista de pedazos {t, b} (asi "1107)," puede ser mitad negrita y mitad normal)
+function renglonesRicos(doc, segs, ancho, fs){
+  const palabras = []; let actual = null;
+  segs.forEach(([texto, neg]) => {
+    const partes = texto.split(/(\s+)/);
+    partes.forEach(pz => {
+      if(pz === "") return;
+      if(/^\s+$/.test(pz)){ actual = null; return; }
+      if(!actual){ actual = []; palabras.push(actual); }
+      actual.push({t: pz, b: !!neg});
+    });
+  });
+  const anchoPal = w => w.reduce((t, p) => { doc.setFont(undefined, p.b ? "bold" : "normal"); doc.setFontSize(fs); return t + doc.getTextWidth(p.t); }, 0);
+  doc.setFont(undefined, "normal"); doc.setFontSize(fs);
+  const esp = doc.getTextWidth(" ");
+  const renglones = []; let r = [], w = 0;
+  palabras.forEach(p => {
+    const wp = anchoPal(p);
+    if(r.length && w + esp + wp > ancho){ renglones.push(r); r = []; w = 0; }
+    w += (r.length ? esp : 0) + wp; r.push({p, wp});
+  });
+  if(r.length) renglones.push(r);
+  return renglones;
+}
+function dibujarRenglonRico(doc, renglon, x, y, ancho, justificar, fs){
+  doc.setFont(undefined, "normal"); doc.setFontSize(fs);
+  const esp = doc.getTextWidth(" ");
+  const total = renglon.reduce((t, q) => t + q.wp, 0);
+  let hueco = esp;
+  if(justificar && renglon.length > 1){ const h = (ancho - total) / (renglon.length - 1); if(h < esp * 10) hueco = h; }
+  let cx = x;
+  renglon.forEach(q => {
+    q.p.forEach(pz => { doc.setFont(undefined, pz.b ? "bold" : "normal"); doc.setFontSize(fs); doc.text(pz.t, cx, y); cx += doc.getTextWidth(pz.t); });
+    cx += hueco;
+  });
+  doc.setFont(undefined, "normal");
+}
+// Texto justificado: reparte el espacio entre palabras para que cada renglon llegue al margen
+// (el ultimo renglon de cada parrafo queda alineado a la izquierda, como en los procesadores de texto)
+function lineaJustificada(doc, linea, x, y, ancho, justificar){
+  const palabras = linea.trim().split(/\s+/);
+  if(!justificar || palabras.length < 2){ doc.text(linea.trim(), x, y); return; }
+  const anchoPalabras = palabras.reduce((t, p) => t + doc.getTextWidth(p), 0);
+  const hueco = (ancho - anchoPalabras) / (palabras.length - 1);
+  if(hueco > doc.getTextWidth(" ") * 10){ doc.text(linea.trim(), x, y); return; }   // renglon muy corto: no se estira
+  let cx = x;
+  palabras.forEach(p => { doc.text(p, cx, y); cx += doc.getTextWidth(p) + hueco; });
+}
+function textoJustificado(doc, lineas, x, y, ancho, interlineado){
+  lineas.forEach((l, i) => lineaJustificada(doc, l, x, y + i * interlineado, ancho, i < lineas.length - 1));
+}
 function generarPDFCliente(c, f, pct, jui){
   jui = jui || {};
   const { jsPDF } = window.jspdf;
@@ -2250,22 +2313,22 @@ function generarPDFCliente(c, f, pct, jui){
   const W = doc.internal.pageSize.getWidth(), M = 50;
   const bruto = f.bruto || 0, desc = f.desc || 0, neto = f.neto || 0, hon = bruto * pct / 100;
   // encabezado
-  doc.setFillColor(30,58,95); doc.rect(0, 0, W, 92, "F");
+  doc.setFillColor(30,58,95); doc.rect(0, 0, W, 80, "F");
   doc.setTextColor(255,255,255); doc.setFont(undefined, "bold"); doc.setFontSize(17);
-  doc.text("ESTUDIO JURÍDICO GÜNSBERG - LAMEDICA - CABOULI", W/2, 40, {align: "center"});
-  doc.setFont(undefined, "normal"); doc.setFontSize(10.5);
-  doc.text("Abogados especialistas en juicios de PFA - Mutual de Suboficiales", W/2, 60, {align: "center"});
-  doc.setFontSize(9); doc.text("Tel. 4345-5532 / 4345-3354 · Lunes a jueves de 16 a 19 hs", W/2, 77, {align: "center"});
+  doc.text("ESTUDIO JURÍDICO GÜNSBERG - LAMEDICA - CABOULI", W/2, 30, {align: "center"});
+  doc.setFont(undefined, "normal"); doc.setFontSize(13);
+  doc.text("Abogados especialistas - Mutual de Suboficiales", W/2, 50, {align: "center"});
+  doc.setFontSize(11.5); doc.text("Tel. 4345-5532 / 4345-3354 · Lunes a jueves de 16 a 19 hs", W/2, 68, {align: "center"});
   // titulo
   doc.setTextColor(30,58,95); doc.setFont(undefined, "bold"); doc.setFontSize(15);
-  doc.text("DETALLE DE LIQUIDACIÓN", W/2, 135, {align: "center"});
+  doc.text("DETALLE DE LIQUIDACIÓN", W/2, 107, {align: "center"});
   doc.setFont(undefined, "normal"); doc.setFontSize(10.5); doc.setTextColor(90,100,115);
   const sub = [c.complementaria ? "Complementaria " + c.complementaria : "", f.fechaPago || c.fechaPago ? "Fecha de pago: " + (f.fechaPago || c.fechaPago) : ""].filter(Boolean).join("   ·   ");
-  if(sub) doc.text(sub, W/2, 153, {align: "center"});
+  if(sub) doc.text(sub, W/2, 123, {align: "center"});
   // datos del cliente
   doc.autoTable({
-    startY: 180, margin: {left: M, right: M}, theme: "plain",
-    styles: {fontSize: 12, cellPadding: {top: 7, bottom: 7, left: 10, right: 10}, textColor: [30,41,59]},
+    startY: 134, margin: {left: M, right: M}, theme: "plain",
+    styles: {fontSize: 12, cellPadding: {top: 5, bottom: 5, left: 10, right: 10}, textColor: [30,41,59]},
     columnStyles: {0: {fontStyle: "bold", cellWidth: 150, textColor: [100,116,139]}},
     body: [["Nombre completo", nombreLindo(f.name)], ["DNI", ((f.doctype ? f.doctype + " " : "") + (f.docnum || "")).trim()]]
       .concat(jui.juicio ? [["Juicio", jui.juicio + (jui.expte ? "  ·  Expte. N° " + jui.expte : "")]] : [])
@@ -2276,37 +2339,83 @@ function generarPDFCliente(c, f, pct, jui){
   // importes
   const filas = [
     ["Importe bruto", fmtMoney(bruto)],
-    ["Descuentos", "- " + fmtMoney(desc)],
+    ["Descuentos personales", "- " + fmtMoney(desc)],
     ["Importe neto (depositado en su cuenta)", fmtMoney(neto)],
     [`Honorarios profesionales (${pct}% del importe bruto)`, fmtMoney(hon)],
   ];
   doc.autoTable({
-    startY: doc.lastAutoTable.finalY + 26, margin: {left: M, right: M}, theme: "grid",
+    startY: doc.lastAutoTable.finalY + 16, margin: {left: M, right: M}, theme: "grid",
     head: [["Concepto", "Importe"]], body: filas,
     headStyles: {fillColor: [30,58,95], textColor: 255, fontStyle: "bold", fontSize: 11.5, halign: "left"},
-    styles: {fontSize: 12.5, cellPadding: 10, lineColor: [213,220,230], lineWidth: 0.6, textColor: [30,41,59]},
-    columnStyles: {1: {halign: "right", cellWidth: 170, fontStyle: "bold"}},
+    styles: {fontSize: 12.5, cellPadding: 7, lineColor: [213,220,230], lineWidth: 0.6, textColor: [30,41,59]},
+    columnStyles: {1: {halign: "right", cellWidth: 150, fontStyle: "bold"}},
     didParseCell: d => {
       if(d.section === "head" && d.column.index === 1) d.cell.styles.halign = "right";
       if(d.section === "body" && d.row.index === 3){ d.cell.styles.fillColor = [254,243,199]; d.cell.styles.fontStyle = "bold"; d.cell.styles.fontSize = 13.5; d.cell.styles.textColor = [120,53,15]; }
       if(d.section === "body" && d.row.index === 2){ d.cell.styles.fillColor = [236,253,243]; }
     }
   });
-  let y = doc.lastAutoTable.finalY + 30;
-  doc.setFont(undefined, "normal"); doc.setFontSize(10.5); doc.setTextColor(71,85,105);
+  let y = doc.lastAutoTable.finalY + 22;
+  doc.setFont(undefined, "normal"); doc.setFontSize(12.5); doc.setTextColor(71,85,105);
   const nota = doc.splitTextToSize(`Los honorarios profesionales corresponden al ${pct}% del importe bruto liquidado por la Caja de Retiros, Jubilaciones y Pensiones de la Policía Federal. Una vez corroborado el depósito, le solicitamos comunicarse con nuestras oficinas.`, W - 2*M);
-  doc.text(nota, M, y);
+  textoJustificado(doc, nota, M, y, W - 2*M, 14.4);
+  if(jui.contador){
+    // aviso de reliquidacion con contador
+    y += nota.length * 14.4 + 6;
+    doc.setFontSize(12.5);
+    const lineas = doc.splitTextToSize(TEXTO_CONTADOR, W - 2*M - 28);
+    const alto = 34 + lineas.length * 14.4;
+    doc.setFillColor(255,247,237); doc.setDrawColor(234,88,12); doc.setLineWidth(1.2);
+    doc.roundedRect(M, y, W - 2*M, alto, 6, 6, "FD");
+    doc.setFillColor(234,88,12); doc.rect(M, y, 6, alto, "F");
+    doc.setTextColor(154,52,18); doc.setFont(undefined, "bold"); doc.setFontSize(13.5);
+    doc.text("IMPORTANTE: RELIQUIDACIÓN CON CONTADOR", M + 16, y + 22);
+    doc.setFont(undefined, "normal"); doc.setFontSize(12.5); doc.setTextColor(67,20,7);
+    textoJustificado(doc, lineas, M + 16, y + 40, W - 2*M - 28, 14.4);
+    y += alto;
+  } else {
+    y += nota.length * 14.4 - 6;
+  }
+  // ---- Cuadro: formas de pago de los honorarios ----
+  y += 12;
+  // cada punto: tramos de texto [texto, negrita]
+  const PAGOS = [
+    [["En nuestro Estudio Jurídico:", 1], [" para efectuar el pago correspondiente a nuestros honorarios profesionales, podrá acercarse a nuestras oficinas ubicadas en la calle ", 0], ["Av. Alicia Moreau de Justo N° 740, Piso 1, Of. 9, C.A.B.A. (CP 1107)", 1], [", de lunes a jueves en el horario de 10:00 a 20:00 hs.", 0]],
+    [["En la Mutual de Suboficiales de la PFA (Sede Central):", 1], [" asimismo, nos encuentra en la sede ubicada en la calle ", 0], ["Beauchef 1560, C.A.B.A.", 1], [", los días miércoles en el horario de 15:00 a 18:00 hs.", 0]],
+    [["Por transferencia bancaria:", 1], [" en caso de requerir efectuar el pago mediante transferencia bancaria, deberá solicitarnos oportunamente los datos de una cuenta a sus efectos, la cual podrá adicionar un recargo según corresponda.", 0]],
+  ];
+  const FS = 11.5, LH = FS * 1.22, anchoTxt = W - 2*M - 40;
+  const bloques = PAGOS.map(segs => renglonesRicos(doc, segs, anchoTxt, FS));
+  const altoPagos = 36 + bloques.reduce((t, r) => t + r.length * LH + 6, 0);
+  if(y + altoPagos > doc.internal.pageSize.getHeight() - 22){ doc.addPage(); y = 50; }
+  doc.setFillColor(239,246,255); doc.setDrawColor(30,58,95); doc.setLineWidth(1.4);
+  doc.roundedRect(M, y, W - 2*M, altoPagos, 6, 6, "FD");
+  doc.setFillColor(30,58,95); doc.rect(M, y, 6, altoPagos, "F");
+  doc.setTextColor(30,58,95); doc.setFont(undefined, "bold"); doc.setFontSize(13.5);
+  doc.text("PAGO DE HONORARIOS PROFESIONALES:", M + 18, y + 22);
+  let yy = y + 42;
+  bloques.forEach(renglones => {
+    doc.setFontSize(FS); doc.setTextColor(30,41,59);
+    doc.setFont(undefined, "bold"); doc.text("•", M + 20, yy);
+    renglones.forEach((r, k) => dibujarRenglonRico(doc, r, M + 32, yy + k * LH, anchoTxt, k < renglones.length - 1, FS));
+    yy += renglones.length * LH + 6;
+  });
   doc.setFontSize(8.5); doc.setTextColor(148,163,184);
-  doc.text("Generado el " + new Date().toLocaleDateString("es-AR"), M, doc.internal.pageSize.getHeight() - 30);
+  doc.text("Generado el " + new Date().toLocaleDateString("es-AR"), M, doc.internal.pageSize.getHeight() - 10);
   const archivo = `Liquidacion_${nombreLindo(f.name).replace(/[^A-Za-zÁÉÍÓÚÑáéíóúñ0-9]+/g, "_").replace(/^_|_$/g, "")}_${(c.complementaria||"").replace(/\//g,"-")}.pdf`;
   return {blob: doc.output("blob"), archivo};
 }
 
-function abrirCompartir(c, f){
-  let pct = 15;
+const TEXTO_CONTADOR = "Tenga presente que la liquidación del juicio presenta errores, debido a que la Caja de Retiros omitió incorporar la totalidad de los rubros correspondientes. Por este motivo, le sugerimos realizar una reliquidación con nuestro contador especialista. El costo de sus honorarios es de $150.000, lo cual incluye el nuevo cálculo y la actualización de los intereses.";
+
+// Por defecto: 20% e INFORMAR RELIQUIDACION CONTADOR
+function abrirCompartir(c, f){ abrirCompartirModal(c, f, true); }
+function abrirCompartirModal(c, f, conContador){
+  let pct = 20;
   const caratulas = (f.caratula || "").split("||").map(x => x.trim()).filter(Boolean).map(leerCaratula);
   let sel = 0;
   let jui = caratulas[0] ? {...caratulas[0]} : {decreto: "", juicio: "", juzgado: "", expte: ""};
+  jui.contador = !!conContador;
   const tel = telefonosUnicos(f.telefono).find(x => x.a.link && !x.a.dudoso) || telefonosUnicos(f.telefono).find(x => x.a.link);
   const m = document.createElement("div");
   m.className = "modal-fondo";
@@ -2318,7 +2427,7 @@ function abrirCompartir(c, f){
         <div><span>Nombre completo</span><b>${esc(nombreLindo(f.name))}</b></div>
         <div><span>DNI</span><b>${esc(((f.doctype ? f.doctype + " " : "") + (f.docnum || "")).trim())}</b></div>
         <div><span>Importe bruto</span><b>${fmtMoney(bruto)}</b></div>
-        <div><span>Descuentos</span><b>- ${fmtMoney(f.desc || 0)}</b></div>
+        <div><span>Descuentos personales</span><b>- ${fmtMoney(f.desc || 0)}</b></div>
         <div><span>Importe neto</span><b>${fmtMoney(f.neto || 0)}</b></div>
       </div>
       <div class="comp-juicio">
@@ -2338,6 +2447,11 @@ function abrirCompartir(c, f){
         <label class="${pct===15?"sel":""}"><input type="radio" name="pct" value="15" ${pct===15?"checked":""}> <b>15%</b> = ${fmtMoney(bruto*0.15)}</label>
         <label class="${pct===20?"sel":""}"><input type="radio" name="pct" value="20" ${pct===20?"checked":""}> <b>20%</b> = ${fmtMoney(bruto*0.20)}</label>
       </div>
+      <div class="comp-cont ${jui.contador ? "si" : ""}">
+        <label class="${jui.contador ? "sel" : ""}"><input type="checkbox" data-cont="si" ${jui.contador ? "checked" : ""}> <b>INFORMAR RELIQUIDACION CONTADOR</b></label>
+        <label class="${jui.contador ? "" : "sel"}"><input type="checkbox" data-cont="no" ${jui.contador ? "" : "checked"}> <b>NO INFORMAR RELIQUIDACION CONTADOR</b></label>
+        ${jui.contador ? `<div class="comp-cont-txt">${esc(TEXTO_CONTADOR)}</div>` : ""}
+      </div>
       <div class="actions" style="justify-content:flex-end;">
         <button class="secondary" data-a="cerrar">Cancelar</button>
         <button class="secondary" data-a="bajar">⬇ Descargar PDF</button>
@@ -2348,7 +2462,10 @@ function abrirCompartir(c, f){
       <div class="muted" style="font-size:12px; margin-top:8px;">${tel ? "WhatsApp del cliente: " + esc(tel.a.display) : "El cliente no tiene celular cargado: vas a poder elegir el contacto en WhatsApp."}</div>
     </div>`;
     m.querySelectorAll('input[name="pct"]').forEach(r => r.addEventListener("change", () => { pct = +r.value; pintar(); }));
-    m.querySelectorAll('input[name="jui"]').forEach(r => r.addEventListener("change", () => { sel = +r.value; jui = {...caratulas[sel]}; pintar(); }));
+    m.querySelectorAll('input[name="jui"]').forEach(r => r.addEventListener("change", () => { sel = +r.value; jui = {...caratulas[sel], contador: jui.contador}; pintar(); }));
+    // las dos casillas se excluyen entre si
+    m.querySelectorAll('input[data-cont]').forEach(r => r.addEventListener("change", () => {
+      jui.contador = r.dataset.cont === "si" ? r.checked : !r.checked; pintar(); }));
     m.querySelectorAll('[data-j]').forEach(inp => inp.addEventListener("input", () => { jui[inp.dataset.j] = inp.value; }));
     m.querySelector('[data-a="cerrar"]').addEventListener("click", () => m.remove());
     m.querySelector('[data-a="copiar"]').addEventListener("click", () => {
@@ -2380,7 +2497,8 @@ function abrirCompartir(c, f){
       const texto = `Estimado/a ${nombreLindo(f.name)}: le enviamos el detalle de la liquidación de su juicio` +
         (jui.juicio ? ` "${jui.juicio}"` : "") + (jui.expte ? ` (Expte. N° ${jui.expte})` : "") +
         (jui.decreto ? `, ${jui.decreto}` : "") +
-        (c.complementaria ? `, complementaria ${c.complementaria}` : "") + `. Estudio Jurídico Günsberg - Lamedica - Cabouli.`;
+        (c.complementaria ? `, complementaria ${c.complementaria}` : "") + `.` +
+        (jui.contador ? "\n\n" + TEXTO_CONTADOR : "") + `\n\nEstudio Jurídico Günsberg - Lamedica - Cabouli.`;
       // En iPhone / celular / Chrome: menu de compartir del sistema con el PDF adjunto (se elige WhatsApp)
       if(navigator.canShare && navigator.canShare({files: [file]})){
         try{ await navigator.share({files: [file], title: archivo, text: texto}); return; }
@@ -2400,12 +2518,20 @@ function abrirCompartir(c, f){
 // Convierte la primera hoja del PDF en imagen PNG (recortando el blanco de abajo)
 async function pdfAImagen(pdfBlob){
   const pdf = await pdfjsLib.getDocument({data: await pdfBlob.arrayBuffer()}).promise;
-  const page = await pdf.getPage(1);
-  const vp = page.getViewport({scale: 2});
-  const cv = document.createElement("canvas"); cv.width = vp.width; cv.height = vp.height;
-  const ctx = cv.getContext("2d");
-  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, cv.width, cv.height);
-  await page.render({canvasContext: ctx, viewport: vp}).promise;
+  const hojas = [];
+  for(let n = 1; n <= pdf.numPages; n++){
+    const page = await pdf.getPage(n);
+    const vp1 = page.getViewport({scale: 2});
+    const c1 = document.createElement("canvas"); c1.width = vp1.width; c1.height = vp1.height;
+    const x1 = c1.getContext("2d"); x1.fillStyle = "#fff"; x1.fillRect(0, 0, c1.width, c1.height);
+    await page.render({canvasContext: x1, viewport: vp1}).promise;
+    hojas.push(c1);
+  }
+  // si hay mas de una hoja se apilan (la ultima se recorta abajo)
+  const cv = document.createElement("canvas"); cv.width = hojas[0].width;
+  cv.height = hojas.reduce((t, h) => t + h.height, 0);
+  const ctx = cv.getContext("2d"); let yo = 0;
+  hojas.forEach(h => { ctx.drawImage(h, 0, yo); yo += h.height; });
   // busca la ultima linea con contenido (sin contar el pie "Generado el...")
   const data = ctx.getImageData(0, 0, cv.width, cv.height).data;
   let fin = cv.height - 1;
