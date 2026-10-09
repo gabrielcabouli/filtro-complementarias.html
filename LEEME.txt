@@ -1,15 +1,15 @@
-FILTRO DE COMPLEMENTARIAS - PAQUETE COMPLETO (version 3.4)
+FILTRO DE COMPLEMENTARIAS - PAQUETE COMPLETO (version 3.6)
 
 Contiene TODOS los cambios hechos hasta ahora:
 contraseña, base de clientes encriptada, sincronizacion entre PC por GitHub (se configura sola con la contraseña),
 COMPLEMENTARIAS POR AÑO con tildes / comentarios / boton Guardar por actor / GUARDAR TODOS LOS CAMBIOS,
 barra verde ABONÓ, historial de versiones, version para iPhone, botones de WhatsApp verdes y naranjas,
 VERIFICAR, apellidos de casada, fecha de pago editable, y el boton PARA COMPARTIR AL CLIENTE
-(PDF con juicio, expediente, juzgado, decreto y honorarios 15% o 20% del bruto), con botones Descargar PDF, COPIAR imagen y Compartir por WhatsApp.
+, la solapa CLIENTES DEUDORES (PDF con juicio, expediente, juzgado, decreto y honorarios 15% o 20% del bruto), con botones Descargar PDF, COPIAR imagen y Compartir por WhatsApp.
 
 1) index.html  -> subirlo a GitHub (repositorio filtro-complementarias.html) reemplazando el anterior.
    Es la version que usan todas las PC y el iPhone desde https://gabrielcabouli.github.io/filtro-complementarias.html/
-2) Carpeta Extension_Chrome -> reemplaza los archivos de la carpeta de la extension y toca "recargar"
+2) Carpeta "Extension Chrome Filtro Complementarias" -> reemplaza los archivos de la carpeta de la extension y toca "recargar"
    en chrome://extensions (no quitar la extension).
 3) Filtro Complementarias.url -> acceso directo para el escritorio.
 

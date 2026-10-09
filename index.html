@@ -44,7 +44,7 @@
   button.danger{background:transparent; border:1px solid var(--danger); color:var(--danger); padding:4px 8px; font-size:12px;}
   .wa-pill{
     display:inline-block; background:#25D366; color:#fff; text-decoration:underline;
-    padding:3px 8px; border-radius:999px; font-size:11px; font-weight:600;
+    padding:5px 11px; border-radius:999px; font-size:14px; font-weight:700; letter-spacing:.02em;
     margin:2px 3px 2px 0; white-space:nowrap;
   }
   .wa-pill:hover{filter:brightness(1.08);}
@@ -159,6 +159,25 @@
   .comp-pct label.sel{background:#fde68a;}
   .modal .comp-pct label{display:flex; justify-content:flex-start; margin-top:4px; color:#1e293b; font-size:15px; font-weight:400;}
   .modal .comp-pct label input{display:inline-block; width:20px; height:20px; margin:0; padding:0; flex:0 0 auto;}
+  .tab-count.deu{background:#dc2626;}
+  .deu-resumen{display:flex; gap:10px; flex-wrap:wrap; margin-top:14px;}
+  .deu-resumen div{background:var(--panel2); border:1px solid var(--border); border-radius:10px; padding:10px 14px; min-width:150px; flex:1;}
+  .deu-resumen span{display:block; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em;}
+  .deu-resumen b{font-size:20px;}
+  .deu-card{background:#fff; border:1px solid var(--border); border-left:6px solid #dc2626; border-radius:10px; padding:12px 14px; margin-bottom:12px; box-shadow:0 1px 3px rgba(15,23,42,.06);}
+  .deu-h{display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; margin-bottom:8px;}
+  .deu-n{display:inline-block; background:#fee2e2; color:#b91c1c; border-radius:6px; padding:1px 8px; font-weight:800; margin-right:4px;}
+  .deu-nombre{font-size:15px;}
+  .deu-tot{color:#b45309; font-size:13px;}
+  .deu-tabla td{vertical-align:middle;}
+  .deu-car{font-size:11px; color:var(--muted); max-width:260px;}
+  .deu-obs{font-size:12px; max-width:200px; white-space:pre-wrap;}
+  .deu-acc button{display:block; width:100%; margin:3px 0; white-space:nowrap;}
+  .btn-abono{background:#16a34a;}
+  .bdg{display:inline-block; font-size:10px; font-weight:800; padding:2px 7px; border-radius:6px; margin:1px 0; white-space:nowrap;}
+  .bdg.no{background:#fee2e2; color:#b91c1c;} .bdg.ok{background:#dcfce7; color:#15803d;} .bdg.sm{background:#f1f5f9; color:#64748b;}
+  #deuBuscar,#deuFiltro,#deuOrden{padding:8px 10px; border-radius:8px; border:1px solid var(--border); font-size:13px; background:#fff;}
+  tr.resaltar td{background:#fde68a !important; transition:background .3s;}
   .fechas-panel{margin:10px 0 14px; display:flex; flex-direction:column; gap:8px;}
   .fecha-row{display:flex; gap:10px; align-items:center; flex-wrap:wrap; background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:8px 12px; font-size:13px;}
   .fecha-row input{width:260px; text-align:center; font-weight:700; padding:6px 8px; border-radius:6px; border:1px solid var(--border);}
@@ -294,6 +313,7 @@
 <div class="tabs">
   <button class="tab active" data-tab="tabFiltro">🔎 FILTRO</button>
   <button class="tab" data-tab="tabArchivo">📚 COMPLEMENTARIAS POR AÑO <span id="archCount" class="tab-count"></span></button>
+  <button class="tab" data-tab="tabDeudores">💸 CLIENTES DEUDORES <span id="deuCount" class="tab-count deu"></span></button>
   <button class="secondary mini" id="btnBloquear" style="margin-left:auto; align-self:center;" title="Cierra el programa; para volver a entrar pide la contraseña">🔒 Bloquear</button>
 </div>
 <div id="tabFiltro">
@@ -341,6 +361,7 @@
 
 </div>
 <div id="tabArchivo" style="display:none;"></div>
+<div id="tabDeudores" style="display:none;"></div>
 <div id="printArea"></div>
 
 <script>
@@ -1607,11 +1628,11 @@ function generarPDF(lista, opciones){
     });
 
     const columns = [
-      { header: "Num", key: "num", w: 54 },
+      { header: "Num", key: "num", w: 64 },
       { header: "DNI", key: "dni", w: 65 },
       { header: "Actor", key: "actor", w: 98 },
       { header: "Teléfono", key: "tel", w: 80 },
-      { header: "Carátula", key: "caratula", w: 158 },
+      { header: "Carátula", key: "caratula", w: 148 },
       { header: "Prev./Benef.", key: "benef", w: 60 },
       { header: "Exp", key: "exp", w: 45 },
       { header: "Bruto", key: "bruto", w: 62 },
@@ -1694,6 +1715,11 @@ function generarPDF(lista, opciones){
                 data.cell.styles.textColor = [200,30,30];
                 data.cell.styles.fontStyle = "bold";
               }
+              if(data.column.index === 0){
+                // lugar para el boton "PARA COMPARTIR AL CLIENTE" debajo del numero
+                data.cell.styles.valign = "top";
+                data.cell.styles.minCellHeight = Math.max(data.cell.styles.minCellHeight || 0, 44);
+              }
               if(data.column.index === 3){
                 const n = telInfo[data.row.index].length;
                 // el texto se dibuja a mano en didDrawCell; se reserva el alto necesario
@@ -1758,6 +1784,16 @@ function generarPDF(lista, opciones){
               doc.setDrawColor(...(r.verificado === "dni" ? [34,165,89] : [224,160,32]));
               doc.setLineWidth(2);
               doc.line(data.cell.x, data.cell.y, data.cell.x, data.cell.y + data.cell.height);
+            }
+            if(r){
+              // boton con enlace: abre el programa directo en "Para compartir al cliente" de este actor
+              const bw = data.cell.width - 8, bh = 19, bx = data.cell.x + 4, by = data.cell.y + data.cell.height - bh - 4;
+              doc.setFillColor(15,118,110); doc.roundedRect(bx, by, bw, bh, 3, 3, "F");
+              doc.setTextColor(255,255,255); doc.setFont(undefined, "bold"); doc.setFontSize(5.4);
+              doc.text("PARA COMPARTIR", bx + bw/2, by + 8, {align: "center"});
+              doc.text("AL CLIENTE", bx + bw/2, by + 14.5, {align: "center"});
+              doc.link(bx, by, bw, bh, {url: enlaceCompartir(r)});
+              doc.setFont(undefined, "normal");
             }
           }
         },
@@ -1871,6 +1907,10 @@ function marcarGuardado(ok){
 function actualizarContadorArchivo(){
   const el = document.getElementById("archCount");
   if(el){ const n = compsVivas().length; el.textContent = n ? n : ""; }
+  contarDeudores();
+  // si la lista de deudores esta a la vista y no se esta escribiendo en ella, se actualiza
+  const td = document.getElementById("tabDeudores");
+  if(td && td.style.display !== "none" && !(td.contains(document.activeElement) && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName))) setTimeout(renderDeudores, 0);
 }
 
 function anioDeComplementaria(comp, fecha){
@@ -1933,9 +1973,9 @@ function esc(s){ return String(s == null ? "" : s).replace(/&/g,"&amp;").replace
 // ---------- pestañas ----------
 document.querySelectorAll(".tabs .tab").forEach(b => b.addEventListener("click", () => {
   document.querySelectorAll(".tabs .tab").forEach(x => x.classList.toggle("active", x === b));
-  document.getElementById("tabFiltro").style.display = b.dataset.tab === "tabFiltro" ? "" : "none";
-  document.getElementById("tabArchivo").style.display = b.dataset.tab === "tabArchivo" ? "" : "none";
+  ["tabFiltro", "tabArchivo", "tabDeudores"].forEach(t => document.getElementById(t).style.display = b.dataset.tab === t ? "" : "none");
   if(b.dataset.tab === "tabArchivo") renderArchivo();
+  if(b.dataset.tab === "tabDeudores") renderDeudores();
 }));
 
 let archBusqueda = "";
@@ -2384,6 +2424,179 @@ function bajarBlob(blob, nombre){
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
 
+
+// =====================================================================
+// CLIENTES DEUDORES: todos los actores de las complementarias guardadas que no abonaron honorarios
+// =====================================================================
+let deuFiltro = "todos", deuBusqueda = "", deuOrden = "nombre";
+function listaDeudores(){
+  const grupos = new Map();
+  compsVivas().forEach(c => c.filas.forEach((f, i) => {
+    if(f.borrado || f.hon === "abono") return;
+    if(deuFiltro === "nopago" && f.hon !== "nopago") return;
+    if(deuFiltro === "sinmarcar" && f.hon) return;
+    const clave = (f.docnum || "").trim() || stripAccents(f.name || "").toUpperCase().replace(/[^A-Z]/g, "");
+    if(!grupos.has(clave)) grupos.set(clave, {nombre: f.name, docnum: f.docnum, doctype: f.doctype, items: []});
+    grupos.get(clave).items.push({c, f, i});
+  }));
+  let lista = [...grupos.values()];
+  const q = stripAccents(deuBusqueda).toUpperCase().trim();
+  if(q) lista = lista.filter(g => stripAccents(g.nombre || "").toUpperCase().includes(q) || (g.docnum || "").includes(q));
+  lista.forEach(g => {
+    g.t15 = g.items.reduce((s, x) => s + (x.f.bruto || 0) * 0.15, 0);
+    g.t20 = g.items.reduce((s, x) => s + (x.f.bruto || 0) * 0.20, 0);
+    g.items.sort((a, b) => fechaOrden(a.f.fechaPago || a.c.fechaPago) - fechaOrden(b.f.fechaPago || b.c.fechaPago));
+  });
+  lista.sort(deuOrden === "monto" ? (a, b) => b.t15 - a.t15 : (a, b) => (a.nombre || "").localeCompare(b.nombre || "", "es"));
+  return lista;
+}
+function contarDeudores(){
+  const s = new Set();
+  compsVivas().forEach(c => c.filas.forEach(f => { if(!f.borrado && f.hon !== "abono") s.add((f.docnum || "") + "|" + (f.name || "")); }));
+  const el = document.getElementById("deuCount"); if(el) el.textContent = s.size ? s.size : "";
+}
+function badgeHon(h){ return h === "nopago" ? '<span class="bdg no">NO PAGÓ HONORARIOS</span>' : '<span class="bdg sm">Honorarios sin marcar</span>'; }
+function badgeCont(c){ return c === "pago" ? '<span class="bdg ok">Contador: PAGÓ</span>' : c === "nopago" ? '<span class="bdg no">Contador: NO PAGÓ</span>' : '<span class="bdg sm">Contador sin marcar</span>'; }
+
+function renderDeudores(){
+  const cont = document.getElementById("tabDeudores");
+  if(!archivoListo){ cont.innerHTML = '<div class="panel">Cargando…</div>'; return; }
+  const y = window.scrollY;
+  const lista = listaDeudores();
+  const tot15 = lista.reduce((s, g) => s + g.t15, 0), tot20 = lista.reduce((s, g) => s + g.t20, 0);
+  const nItems = lista.reduce((s, g) => s + g.items.length, 0);
+  let html = `<div class="panel">
+    <div class="row" style="justify-content:space-between;">
+      <div><b style="font-size:16px;">💸 Clientes deudores</b>
+        <div class="sub" style="margin:4px 0 0;">Actores de las complementarias guardadas que todavía <b>no abonaron honorarios</b>. Cuando tildes ABONÓ, desaparecen de esta lista.</div></div>
+      <button class="secondary" id="deuPDF">⬇ DESCARGAR LISTADO PDF</button>
+    </div>
+    <div class="row" style="margin-top:12px;">
+      <input type="text" id="deuBuscar" placeholder="Buscar cliente o DNI…" value="${esc(deuBusqueda)}" style="width:240px;">
+      <select id="deuFiltro">
+        <option value="todos" ${deuFiltro==="todos"?"selected":""}>Todos los que no abonaron</option>
+        <option value="nopago" ${deuFiltro==="nopago"?"selected":""}>Solo marcados NO PAGÓ</option>
+        <option value="sinmarcar" ${deuFiltro==="sinmarcar"?"selected":""}>Solo sin marcar</option>
+      </select>
+      <select id="deuOrden">
+        <option value="nombre" ${deuOrden==="nombre"?"selected":""}>Ordenar por nombre</option>
+        <option value="monto" ${deuOrden==="monto"?"selected":""}>Ordenar por monto adeudado</option>
+      </select>
+    </div>
+    <div class="deu-resumen">
+      <div><span>Clientes</span><b>${lista.length}</b></div>
+      <div><span>Cobros pendientes</span><b>${nItems}</b></div>
+      <div><span>Total honorarios 15%</span><b>${fmtMoney(tot15)}</b></div>
+      <div><span>Total honorarios 20%</span><b>${fmtMoney(tot20)}</b></div>
+    </div>
+  </div>`;
+  if(!lista.length) html += `<div class="panel" style="text-align:center;color:var(--muted);">No hay clientes deudores con este filtro. 🎉</div>`;
+  lista.forEach((g, n) => {
+    const r0 = g.items[0].f;
+    html += `<div class="deu-card">
+      <div class="deu-h">
+        <div><span class="deu-n">${n + 1}</span> <b class="deu-nombre">${esc(nombreLindo(g.nombre))}</b>
+          <span class="muted">${esc(((g.doctype ? g.doctype + " " : "") + (g.docnum || "")).trim())}</span></div>
+        <div class="deu-wa">${waButtonsHtml(r0)}</div>
+        <div class="deu-tot">Adeuda 15%: <b>${fmtMoney(g.t15)}</b> · 20%: <b>${fmtMoney(g.t20)}</b></div>
+      </div>
+      <div class="tablewrap" style="max-height:none;"><table class="deu-tabla"><thead><tr>
+        <th>Complementaria</th><th>Fecha de pago</th><th>Juicio</th><th class="num">Bruto</th><th class="num">Neto</th><th class="num">15%</th><th class="num">20%</th><th>Estado</th><th>Comentario</th><th></th>
+      </tr></thead><tbody>${g.items.map(({c, f, i}) => `<tr>
+        <td><b>${esc(c.complementaria || "—")}</b></td>
+        <td>${esc(f.fechaPago || c.fechaPago || "")}</td>
+        <td class="deu-car">${esc((f.caratula || "").split("||").map(x => x.trim()).filter(Boolean).join(" / "))}</td>
+        <td class="num">${fmtMoney(f.bruto || 0)}</td>
+        <td class="num">${fmtMoney(f.neto || 0)}</td>
+        <td class="num">${fmtMoney((f.bruto || 0) * 0.15)}</td>
+        <td class="num">${fmtMoney((f.bruto || 0) * 0.20)}</td>
+        <td>${badgeHon(f.hon)}<br>${badgeCont(f.cont)}</td>
+        <td class="deu-obs">${esc(f.obs || "")}</td>
+        <td class="deu-acc">
+          <button class="mini secondary" data-ver="${esc(c.id)}" data-i="${i}">🔎 Ver en la complementaria</button>
+          <button class="mini btn-abono" data-abono="${esc(c.id)}" data-i="${i}">✓ ABONÓ</button>
+        </td></tr>`).join("")}</tbody></table></div>
+    </div>`;
+  });
+  cont.innerHTML = html;
+  window.scrollTo(0, y);
+  const b = cont.querySelector("#deuBuscar");
+  b.addEventListener("input", e => { deuBusqueda = e.target.value; const pos = e.target.selectionStart; renderDeudores();
+    const nb = document.getElementById("deuBuscar"); nb.focus(); nb.setSelectionRange(pos, pos); });
+  cont.querySelector("#deuFiltro").addEventListener("change", e => { deuFiltro = e.target.value; renderDeudores(); });
+  cont.querySelector("#deuOrden").addEventListener("change", e => { deuOrden = e.target.value; renderDeudores(); });
+  cont.querySelector("#deuPDF").addEventListener("click", () => pdfDeudores(lista));
+  cont.querySelectorAll("[data-ver]").forEach(btn => btn.addEventListener("click", () => irAFila(btn.dataset.ver, +btn.dataset.i)));
+  cont.querySelectorAll("[data-abono]").forEach(btn => btn.addEventListener("click", async () => {
+    const c = ARCHIVO[btn.dataset.abono], i = +btn.dataset.i, f = c.filas[i];
+    if(!(await preguntar(`¿Marcar que ${nombreLindo(f.name)} ABONÓ los honorarios?`, `Complementaria ${c.complementaria}. Sale de la lista de deudores y queda tachado en la complementaria.`, "Sí, abonó"))) return;
+    BORRADORES.delete(c.id + "|" + i);
+    c.filas[i] = Object.assign({}, f, {hon: "abono", mod: ahoraMs()});
+    guardarArchivo(); renderDeudores();
+  }));
+}
+function irAFila(id, i){
+  document.querySelector('.tab[data-tab="tabArchivo"]').click();
+  archAbiertos.add(id); renderArchivo();
+  const tr = document.querySelector(`tr.arch-fila[data-id="${CSS.escape(id)}"][data-i="${i}"]`);
+  if(tr){ tr.scrollIntoView({block: "center"}); tr.classList.add("resaltar"); setTimeout(() => tr.classList.remove("resaltar"), 2500); }
+}
+function pdfDeudores(lista){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({orientation: "landscape", unit: "pt", format: "a4"});
+  const W = doc.internal.pageSize.getWidth();
+  doc.setFillColor(30,58,95); doc.rect(0, 0, W, 34, "F");
+  doc.setTextColor(255,255,255); doc.setFont(undefined, "bold"); doc.setFontSize(14);
+  doc.text("Clientes deudores de honorarios", 30, 22);
+  doc.setFontSize(8); doc.setFont(undefined, "normal");
+  doc.text(`Generado ${new Date().toLocaleDateString("es-AR")} - ${lista.length} clientes`, W - 30, 22, {align: "right"});
+  const body = [];
+  lista.forEach((g, n) => g.items.forEach(({c, f}, j) => body.push([
+    j === 0 ? String(n + 1) : "", j === 0 ? nombreLindo(g.nombre) : "", j === 0 ? ((g.doctype ? g.doctype + " " : "") + (g.docnum || "")).trim() : "",
+    c.complementaria || "", f.fechaPago || c.fechaPago || "", fmtMoney(f.bruto || 0), fmtMoney((f.bruto || 0) * 0.15), fmtMoney((f.bruto || 0) * 0.20),
+    (f.hon === "nopago" ? "NO PAGÓ" : "Sin marcar") + (f.cont ? "\nContador: " + (f.cont === "pago" ? "PAGÓ" : "NO PAGÓ") : ""), f.obs || ""
+  ])));
+  doc.autoTable({
+    startY: 44, head: [["#", "Cliente", "DNI", "Complementaria", "Fecha pago", "Bruto", "15%", "20%", "Estado", "Comentario"]], body,
+    theme: "grid", margin: {left: 30, right: 30},
+    styles: {fontSize: 7.5, cellPadding: 4, lineColor: [184,192,204], lineWidth: 0.5},
+    headStyles: {fillColor: [30,58,95], textColor: 255, fontStyle: "bold"},
+    columnStyles: {0: {cellWidth: 22, halign: "center"}, 1: {cellWidth: 130, fontStyle: "bold"}, 5: {halign: "right"}, 6: {halign: "right"}, 7: {halign: "right"}, 9: {cellWidth: 150}},
+  });
+  const tot15 = lista.reduce((s, g) => s + g.t15, 0), tot20 = lista.reduce((s, g) => s + g.t20, 0);
+  doc.setFontSize(9); doc.setFont(undefined, "bold"); doc.setTextColor(30,58,95);
+  doc.text(`Total adeudado 15%: ${fmtMoney(tot15)}     Total adeudado 20%: ${fmtMoney(tot20)}`, W - 30, doc.lastAutoTable.finalY + 16, {align: "right"});
+  bajarBlob(doc.output("blob"), `clientes_deudores_${new Date().toISOString().slice(0,10)}.pdf`);
+}
+
+// ---------- Enlace desde el PDF: abre "Para compartir al cliente" de un actor ----------
+const APP_URL = "https://gabrielcabouli.github.io/filtro-complementarias.html/";
+function enlaceCompartir(r){
+  return APP_URL + "#compartir=" + encodeURIComponent(idComplementaria(r)) + "~" + encodeURIComponent(r._k || claveFila(r));
+}
+function abrirDesdeEnlace(ultimoIntento){
+  const m = /#compartir=([^~]*)~(.*)$/.exec(location.hash || "");
+  if(!m) return true;
+  const id = decodeURIComponent(m[1]), k = decodeURIComponent(m[2]);
+  const c = ARCHIVO[id] && !ARCHIVO[id].borrado ? ARCHIVO[id] : null;
+  const f = c ? c.filas.find(x => !x.borrado && (x._k === k || claveFila(x) === k)) : null;
+  if(!f){
+    if(ultimoIntento){
+      history.replaceState(null, "", location.pathname + location.search);
+      alert("No encontré a ese actor en las complementarias guardadas (" + id + "). Puede que la complementaria se haya eliminado.");
+    }
+    return false;
+  }
+  history.replaceState(null, "", location.pathname + location.search);
+  document.querySelector('.tab[data-tab="tabArchivo"]').click();
+  archAbiertos.add(c.id); renderArchivo();
+  const i = c.filas.indexOf(f);
+  const tr = document.querySelector(`tr.arch-fila[data-id="${CSS.escape(c.id)}"][data-i="${i}"]`);
+  if(tr){ tr.scrollIntoView({block: "center"}); tr.classList.add("resaltar"); setTimeout(() => tr.classList.remove("resaltar"), 2500); }
+  abrirCompartir(c, f);
+  return true;
+}
+
 // Ventana de confirmacion propia (bien visible; no depende de los avisos del navegador)
 function preguntar(titulo, detalle, textoSi){
   return new Promise(ok => {
@@ -2493,7 +2706,8 @@ async function intentarDesbloqueo(){
     document.body.classList.remove("bloqueado");
     await cargarArchivo();
     if(document.getElementById("tabArchivo").style.display !== "none") renderArchivo();
-    SYNC.iniciar();
+    const yaAbierto = abrirDesdeEnlace(false);          // enlace desde un PDF (con lo guardado en esta PC)
+    SYNC.iniciar().then(() => { if(!yaAbierto) abrirDesdeEnlace(true); });   // o despues de bajar lo de la nube
   }catch(e){
     err.textContent = "Contraseña incorrecta.";
     inp.value = ""; inp.focus();
