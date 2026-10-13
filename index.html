@@ -3054,6 +3054,8 @@ function abrirNotificar(id){
   const m = document.createElement("div"); m.className = "modal-fondo";
   const fh = ms => { const d = new Date(ms); return d.toLocaleDateString("es-AR") + " " + d.toLocaleTimeString("es-AR", {hour: "2-digit", minute: "2-digit"}); };
   const pintar = () => {
+    // se guarda donde estaba el scroll para que la pantalla no salte al tildar/destildar
+    const sc = [m.scrollTop, (m.querySelector(".notif-modal") || {}).scrollTop || 0, (m.querySelector(".notif-lista") || {}).scrollTop || 0];
     const items = notifItems(c);
     items.forEach(x => { const key = x.i + "|" + x.num; if(!incluir.has(key)) incluir.set(key, !x.f.dudoso); });
     const elegidos = items.filter(x => incluir.get(x.i + "|" + x.num));
@@ -3098,6 +3100,7 @@ function abrirNotificar(id){
     m.querySelectorAll("[data-desh]").forEach(b => b.addEventListener("click", () => { const x = porKey(b.dataset.desh); marcarNotificado(c, x.i, x.num, false); pintar(); }));
     m.querySelectorAll("[data-inc]").forEach(b => b.addEventListener("change", () => { incluir.set(b.dataset.inc, b.checked); pintar(); }));
     m.querySelector('[data-a="cerrar"]').addEventListener("click", () => { m.remove(); renderArchivo(); });
+    m.scrollTop = sc[0]; m.querySelector(".notif-modal").scrollTop = sc[1]; m.querySelector(".notif-lista").scrollTop = sc[2];
   };
   pintar();
   m.addEventListener("click", e => { if(e.target === m){ m.remove(); renderArchivo(); } });
