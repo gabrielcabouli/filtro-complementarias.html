@@ -91,6 +91,22 @@
   .recibo-prev{flex:1; border:1px solid var(--border); border-radius:8px; background:#f1f5f9; padding:6px; max-height:70vh; overflow:auto;}
   .recibo-prev img{width:100%; display:block; background:#fff;}
   @media (max-width:760px){ .recibo-grid{flex-direction:column;} .recibo-form{flex:1 1 auto; width:100%;} }
+  .btn-notif{background:#16a34a; color:#fff; font-weight:800; border:none; border-radius:8px; padding:8px 12px; cursor:pointer; font-size:13px;}
+  .btn-notif:hover{background:#15803d;} .notif-cnt{background:#fff; color:#15803d; border-radius:10px; padding:1px 7px; margin-left:4px; font-size:11.5px;}
+  .modal.notif-modal{width:760px; max-width:96vw; max-height:92vh; overflow:auto;}
+  .notif-ayuda{font-size:13px; color:#334155; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:9px 12px; line-height:1.45;}
+  .notif-barra{height:10px; background:#e2e8f0; border-radius:6px; margin:12px 0 6px; overflow:hidden;} .notif-barra div{height:100%; background:#16a34a;}
+  .notif-estado{font-size:14px; color:#1e293b; margin-bottom:10px;}
+  .notif-sig{display:block; width:100%; background:#16a34a; color:#fff; font-size:16px; font-weight:800; border:none; border-radius:10px; padding:14px; cursor:pointer; margin-bottom:12px;}
+  .notif-sig:hover{background:#15803d;}
+  .notif-lista{border:1px solid var(--border); border-radius:10px; max-height:46vh; overflow:auto;}
+  .notif-fila{display:flex; align-items:center; gap:10px; padding:7px 10px; border-bottom:1px solid #eef2f7; font-size:13px;}
+  .notif-fila input{width:18px; height:18px; flex:0 0 auto;}
+  .notif-fila.enviado{background:#f0fdf4;} .notif-fila.fuera{opacity:.45;}
+  .notif-nom{flex:1; font-weight:700; color:#1e293b;} .notif-nom small{display:block; font-weight:400; color:#64748b;}
+  .notif-ok{color:#15803d; font-weight:800; font-size:12px; text-align:right;} .notif-ok small{display:block; font-weight:400; color:#64748b;}
+  .notif-uno{background:#16a34a; color:#fff;}
+  .notif-sin{margin-top:10px; font-size:12.5px; color:#64748b;} .notif-sin summary{cursor:pointer; font-weight:700; color:#b45309;}
   .verif-btn{background:#fff; color:#dc2626; border:2px solid #dc2626; border-radius:6px; font-size:11px; font-weight:800; padding:3px 7px; cursor:pointer;}
   .verif-btn:hover{background:#dc2626; color:#fff;}
   .tel-edit{background:#fff; border:1px solid #cbd5e1; border-radius:50%; width:28px; height:28px; padding:0; font-size:13px; line-height:26px; cursor:pointer; flex:0 0 auto; margin-left:4px;}
@@ -2197,6 +2213,7 @@ function _renderArchivo(cont){
         html += `<div class="arch-comp" data-id="${esc(c.id)}">
           <div class="arch-comp-h">
             <button class="ver-btn${abierto ? " abierto" : ""}" data-toggle="${esc(c.id)}">${abierto ? "▾ OCULTAR COMPLEMENTARIA" : "▸ VER COMPLEMENTARIA"}</button>
+            <button class="btn-notif" data-notif="${esc(c.id)}" title="Manda el aviso por WhatsApp, uno por uno, a todos los celulares verificados (en verde)">📲 NOTIFICAR CLIENTES POR WHATSAPP${(() => { const n = notifResumen(c); return n.total ? ` <span class="notif-cnt">${n.enviados}/${n.total}</span>` : ""; })()}</button>
             <b class="arch-titulo">Complementaria ${esc(c.complementaria || "sin número")}</b>
             <span>Fecha de pago: <input class="arch-fecha" data-fecha="${esc(c.id)}" value="${esc(c.fechaPago)}"></span>
             <span class="muted">${filasVivas(c).length} clientes · ${t.abonados} abonaron</span>
@@ -2334,6 +2351,7 @@ function conectarArchivo(cont){
     inp.addEventListener("change", () => { if(inp.files[0]) agregarNuevosDesdePDF(btn.dataset.nuevos, inp.files[0], btn); });
     inp.click();
   }));
+  cont.querySelectorAll("[data-notif]").forEach(btn => btn.addEventListener("click", () => abrirNotificar(btn.dataset.notif)));
   cont.querySelectorAll("[data-delcomp]").forEach(btn => btn.addEventListener("click", async () => {
     const c = ARCHIVO[btn.dataset.delcomp];
     const n = filasVivas(c).length;
@@ -2998,6 +3016,82 @@ function abrirRecibo(c, f){
   m.addEventListener("click", e => { if(e.target === m) m.remove(); });
   document.body.appendChild(m);
   refrescar();
+}
+
+// =====================================================================
+// NOTIFICAR CLIENTES POR WHATSAPP (envio guiado, uno por uno)
+// WhatsApp no permite que una pagina mande mensajes sola: se abre cada chat con el
+// mensaje ya escrito y se toca "Enviar". El programa recuerda a quien ya se le mando.
+// =====================================================================
+function notifItems(c){
+  const items = [];
+  c.filas.forEach((f, i) => {
+    if(f.borrado) return;
+    telefonosUnicos(f.telefono).forEach(({p, a}) => {
+      if(!a.link || a.dudoso) return;                // solo celulares verificados (en verde)
+      const num = a.link.replace(/\D/g, "").slice(-10);
+      items.push({i, f, p, a, num, enviado: (f.notif || {})[num] || 0});
+    });
+  });
+  const k = f => stripAccents(f.name || "").toUpperCase();
+  return items.sort((x, y) => k(x.f).localeCompare(k(y.f), "es"));
+}
+function notifResumen(c){ const it = notifItems(c).filter(x => !x.f.dudoso || x.enviado); return {total: it.length, enviados: it.filter(x => x.enviado).length}; }
+function sinCelular(c){ return filasVivas(c).filter(f => !telefonosUnicos(f.telefono).some(({a}) => a.link && !a.dudoso)); }
+function marcarNotificado(c, i, num, valor){
+  const ms = ahoraMs();
+  const notif = Object.assign({}, c.filas[i].notif || {});
+  if(valor) notif[num] = ms; else delete notif[num];
+  c.filas[i] = Object.assign({}, c.filas[i], {notif, mod: ms}); c.mod = ms;
+  guardarArchivo();
+}
+function abrirNotificar(id){
+  const c = ARCHIVO[id]; if(!c) return;
+  const incluir = new Map();                       // los VERIFICAR arrancan destildados
+  const m = document.createElement("div"); m.className = "modal-fondo";
+  const fh = ms => { const d = new Date(ms); return d.toLocaleDateString("es-AR") + " " + d.toLocaleTimeString("es-AR", {hour: "2-digit", minute: "2-digit"}); };
+  const pintar = () => {
+    const items = notifItems(c);
+    items.forEach(x => { const key = x.i + "|" + x.num; if(!incluir.has(key)) incluir.set(key, !x.f.dudoso); });
+    const elegidos = items.filter(x => incluir.get(x.i + "|" + x.num));
+    const pend = elegidos.filter(x => !x.enviado), sig = pend[0];
+    const env = elegidos.length - pend.length;
+    const sinCel = sinCelular(c);
+    m.innerHTML = `<div class="modal notif-modal">
+      <h3>📲 Notificar clientes por WhatsApp — Complementaria ${esc(c.complementaria || "")}</h3>
+      <div class="notif-ayuda">Se manda el mismo aviso que al tocar el teléfono verde. Tocá <b>ENVIAR SIGUIENTE</b>: se abre WhatsApp con el mensaje ya escrito, tocás <b>Enviar</b> y volvés acá para el próximo. Queda anotado a quién ya se le mandó (también en las otras PC).</div>
+      <div class="notif-barra"><div style="width:${elegidos.length ? Math.round(env*100/elegidos.length) : 0}%"></div></div>
+      <div class="notif-estado"><b>${env}</b> de <b>${elegidos.length}</b> enviados${pend.length ? ` · faltan <b>${pend.length}</b>` : " · <b style='color:#15803d'>✓ ¡Listo, se notificó a todos!</b>"}</div>
+      ${sig ? `<button class="notif-sig" data-sig="1">▶ ENVIAR SIGUIENTE: ${esc(nombreLindo(sig.f.name))} · ${esc(sig.a.display)}</button>` : ""}
+      <div class="notif-lista">
+        ${items.map(x => { const key = x.i + "|" + x.num, on = incluir.get(key);
+          return `<div class="notif-fila${x.enviado ? " enviado" : ""}${on ? "" : " fuera"}">
+            <input type="checkbox" data-inc="${key}" ${on ? "checked" : ""} title="Incluir en el envío">
+            <div class="notif-nom">${x.f.dudoso ? '<span class="verif">VERIFICAR</span> ' : ""}${esc(nombreLindo(x.f.name))}<small>DNI ${esc(x.f.docnum || "")}</small></div>
+            <span class="wa-pill">💬 ${esc(x.a.display)}</span>
+            ${x.enviado ? `<span class="notif-ok" title="${fh(x.enviado)}">✓ ENVIADO <small>${fh(x.enviado)}</small></span>
+                           <button class="mini secondary" data-desh="${key}" title="Volver a marcar como pendiente">↺</button>`
+                        : `<button class="mini notif-uno" data-uno="${key}">Enviar</button>`}
+          </div>`; }).join("")}
+      </div>
+      ${sinCel.length ? `<details class="notif-sin"><summary>${sinCel.length} cliente${sinCel.length===1?"":"s"} sin celular verificado (no se les puede mandar)</summary>
+        ${sinCel.map(f => `<div>${esc(nombreLindo(f.name))} — ${esc(phoneLines(f.telefono).join(" / ") || "sin teléfono")}</div>`).join("")}</details>` : ""}
+      <div class="actions" style="justify-content:flex-end;"><button class="secondary" data-a="cerrar">Cerrar</button></div>
+    </div>`;
+    const enviar = x => {
+      window.open(waLinkWithMessage(x.p, x.f), "_blank");
+      marcarNotificado(c, x.i, x.num, true); pintar();
+    };
+    const porKey = key => items.find(x => x.i + "|" + x.num === key);
+    if(sig) m.querySelector("[data-sig]").addEventListener("click", () => enviar(sig));
+    m.querySelectorAll("[data-uno]").forEach(b => b.addEventListener("click", () => enviar(porKey(b.dataset.uno))));
+    m.querySelectorAll("[data-desh]").forEach(b => b.addEventListener("click", () => { const x = porKey(b.dataset.desh); marcarNotificado(c, x.i, x.num, false); pintar(); }));
+    m.querySelectorAll("[data-inc]").forEach(b => b.addEventListener("change", () => { incluir.set(b.dataset.inc, b.checked); pintar(); }));
+    m.querySelector('[data-a="cerrar"]').addEventListener("click", () => { m.remove(); renderArchivo(); });
+  };
+  pintar();
+  m.addEventListener("click", e => { if(e.target === m){ m.remove(); renderArchivo(); } });
+  document.body.appendChild(m);
 }
 
 
