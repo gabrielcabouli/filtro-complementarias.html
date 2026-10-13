@@ -82,6 +82,12 @@
   .recibo-grid{display:flex; gap:16px; align-items:flex-start;}
   .recibo-form{flex:0 0 380px;}
   .recibo-form textarea{display:block; width:100%; margin-top:4px; padding:9px 10px; border:1px solid var(--border); border-radius:8px; font-size:14px; font-family:inherit;}
+  .recibo-sel{display:block; width:100%; margin-top:4px; padding:9px 10px; border:1px solid var(--border); border-radius:8px; font-size:14px; font-weight:700; background:#fff;}
+  .recibo-hint{font-size:11.5px; margin-top:4px; line-height:1.35;} .recibo-hint.ok{color:#15803d;} .recibo-hint.no{color:#b45309;}
+  .modal label.recibo-gastos{display:flex; align-items:center; gap:8px; margin-top:12px; padding:9px 10px; border:2px solid #be185d; border-radius:8px; background:#fdf2f8; color:#9d174d; font-size:13px; cursor:pointer;}
+  .modal label.recibo-gastos input{display:inline-block; width:18px; height:18px; margin:0; accent-color:#be185d;}
+  .recibo-gastos span{font-weight:600;}
+  .recibo-total{margin-top:10px; font-size:13.5px; color:#1e3a5f; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:8px 10px;}
   .recibo-prev{flex:1; border:1px solid var(--border); border-radius:8px; background:#f1f5f9; padding:6px; max-height:70vh; overflow:auto;}
   .recibo-prev img{width:100%; display:block; background:#fff;}
   @media (max-width:760px){ .recibo-grid{flex-direction:column;} .recibo-form{flex:1 1 auto; width:100%;} }
@@ -2801,7 +2807,7 @@ function generarRecibo(d){
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({orientation: "portrait", unit: "pt", format: "a4"});
   const W = doc.internal.pageSize.getWidth(), M = 42, X0 = M + 22, ANCHO = W - 2*X0;
-  const importe = leerImporte(d.importe);
+  const importe = leerImporte(d.importe), gastos = d.gastos ? GASTOS_CONTABLE : 0, total = importe + gastos;
   // encabezado
   doc.setFillColor(30,58,95); doc.rect(M, 30, W - 2*M, 96, "F");
   dibujarEmblema(doc, M + 56, 78, 36);
@@ -2830,22 +2836,38 @@ function generarRecibo(d){
   const segs = [
     ["Recibí de ", 0], [(d.nombre || "").toUpperCase(), 1],
     [d.dni ? ", DNI " + d.dni : "", 0],
-    [", la suma de PESOS ", 0], [numeroALetras(importe), 1], [" (" + fmtMoney(importe) + ")", 1],
-    [" en concepto de " + (d.concepto || "honorarios profesionales"), 0],
+    [gastos ? ", la suma total de PESOS " : ", la suma de PESOS ", 0], [numeroALetras(total), 1], [" (" + fmtMoney(total) + ")", 1],
+    [" en concepto de " + (d.concepto || "honorarios profesionales") + (gastos ? " (" + fmtMoney(importe) + ")" : ""), 0],
     [d.decreto ? " correspondientes al " : "", 0], [d.decreto || "", 1],
     [d.juicio ? ", en autos \"" + d.juicio + "\"" + (d.expte ? " (Expte. N° " + d.expte + ")" : "") : "", 0],
-    [".", 0]
+    [".", 0],
+    [gastos ? " Asimismo se informa que se abonan gastos de estudio contable por liquidación" : "", 0],
+    [gastos ? " (" + fmtMoney(gastos) + ")." : "", 1]
   ].filter(s => s[0]);
   const renglones = renglonesRicos(doc, segs, ANCHO, fs);
   renglones.forEach((r, i) => { dibujarRenglonRico(doc, r, X0, y, ANCHO, i < renglones.length - 1, fs); y += fs * 1.55; });
   // importe destacado
   y += 10;
   doc.setFillColor(239,246,255); doc.setDrawColor(147,197,253); doc.setLineWidth(1);
-  doc.roundedRect(X0, y, ANCHO, 44, 6, 6, "FD");
-  doc.setTextColor(30,58,95); doc.setFont(undefined, "bold"); doc.setFontSize(12);
-  doc.text("IMPORTE RECIBIDO", X0 + 16, y + 27);
-  doc.setFontSize(19); doc.text(fmtMoney(importe), X0 + ANCHO - 16, y + 29, {align: "right"});
-  y += 44;
+  if(gastos){
+    doc.roundedRect(X0, y, ANCHO, 92, 6, 6, "FD");
+    doc.setTextColor(51,65,85); doc.setFont(undefined, "normal"); doc.setFontSize(11.5);
+    doc.text("Honorarios profesionales" + (d.decreto ? " - " + d.decreto : ""), X0 + 16, y + 22);
+    doc.text(fmtMoney(importe), X0 + ANCHO - 16, y + 22, {align: "right"});
+    doc.text("Gastos de estudio contable por liquidación", X0 + 16, y + 42);
+    doc.text(fmtMoney(gastos), X0 + ANCHO - 16, y + 42, {align: "right"});
+    doc.setDrawColor(147,197,253); doc.line(X0 + 12, y + 53, X0 + ANCHO - 12, y + 53);
+    doc.setTextColor(30,58,95); doc.setFont(undefined, "bold"); doc.setFontSize(12);
+    doc.text("TOTAL RECIBIDO", X0 + 16, y + 77);
+    doc.setFontSize(19); doc.text(fmtMoney(total), X0 + ANCHO - 16, y + 79, {align: "right"});
+    y += 92;
+  } else {
+    doc.roundedRect(X0, y, ANCHO, 44, 6, 6, "FD");
+    doc.setTextColor(30,58,95); doc.setFont(undefined, "bold"); doc.setFontSize(12);
+    doc.text("IMPORTE RECIBIDO", X0 + 16, y + 27);
+    doc.setFontSize(19); doc.text(fmtMoney(importe), X0 + ANCHO - 16, y + 29, {align: "right"});
+    y += 44;
+  }
   // texto adicional
   if((d.adicional || "").trim()){
     y += 26; doc.setFont(undefined, "normal"); doc.setFontSize(fs); doc.setTextColor(30,41,59);
@@ -2867,11 +2889,18 @@ function generarRecibo(d){
   const archivo = `recibo_${(d.nombre || "cliente").replace(/[^\wÁÉÍÓÚÑáéíóúñ]+/g, "_")}_${(d.fecha||"").replace(/\//g, "-")}.pdf`;
   return {blob: doc.output("blob"), archivo, doc};
 }
+const GASTOS_CONTABLE = 150000;
+const DECRETOS_RECIBO = ["DECRETO 380/17", "DECRETO 2140/13", "DECRETO 2744/93"];
+function claveDecreto(t){ const m = /(2140|380|2744)/.exec(t || ""); return m ? m[1] : ""; }
 function abrirRecibo(c, f){
-  const car = (f.caratula || "").split("||").map(x => x.trim()).filter(Boolean).map(leerCaratula)[0] || {};
+  const cars = (f.caratula || "").split("||").map(x => x.trim()).filter(Boolean).map(leerCaratula);
+  const car0 = cars.find(k => claveDecreto(k.decreto)) || cars[0] || {};
+  const dec0 = DECRETOS_RECIBO.find(x => claveDecreto(x) === claveDecreto(car0.decreto)) || "DECRETO 2140/13";
+  const carDe = dec => cars.find(k => claveDecreto(k.decreto) === claveDecreto(dec));
+  const c0 = carDe(dec0) || {};
   const d = {
     nombre: nombreLindo(f.name).replace(/,\s*/, " "), dni: (f.docnum || "").trim(), fecha: fechaHoyTexto(),
-    decreto: car.decreto || "", juicio: car.juicio || "", expte: car.expte || "",
+    decreto: dec0, juicio: c0.juicio || "", expte: c0.expte || "", gastos: false,
     importe: fmtMoney((f.bruto || 0) * 0.20).replace(/^\$\s*/, ""), concepto: "honorarios profesionales", adicional: ""
   };
   const tel = telefonosUnicos(f.telefono).find(x => x.a.link && !x.a.dudoso) || telefonosUnicos(f.telefono).find(x => x.a.link);
@@ -2885,14 +2914,16 @@ function abrirRecibo(c, f){
           <label style="flex:1;">DNI<input data-r="dni" value="${esc(d.dni)}"></label>
           <label style="flex:1;">Fecha<input data-r="fecha" value="${esc(d.fecha)}"></label>
         </div>
-        <label>Decreto abonado<input data-r="decreto" value="${esc(d.decreto)}" list="listaDecretosR"></label>
-        <datalist id="listaDecretosR"><option value="Decreto 2140/13"><option value="Decreto 380/17"><option value="Decreto 2744/93"></datalist>
+        <label>Decreto abonado<select data-dec="1" class="recibo-sel">${DECRETOS_RECIBO.map(x => `<option ${x === d.decreto ? "selected" : ""}>${x}</option>`).join("")}</select></label>
         <div class="row" style="gap:8px;">
           <label style="flex:1;">Importe ($)<input data-r="importe" value="${esc(d.importe)}"></label>
           <label style="flex:1.4;">Concepto<input data-r="concepto" value="${esc(d.concepto)}"></label>
         </div>
         <label>Juicio (opcional)<input data-r="juicio" value="${esc(d.juicio)}"></label>
+        <div class="recibo-hint" id="recJuiHint"></div>
+        <label class="recibo-gastos"><input type="checkbox" data-gastos="1"> <b>ABONA GASTOS DE ESTUDIO CONTABLE</b> <span>(+ ${fmtMoney(GASTOS_CONTABLE)})</span></label>
         <label>Texto adicional (opcional)<textarea data-r="adicional" rows="3" placeholder="Ej.: Se deja constancia que con el presente pago queda cancelado…">${esc(d.adicional)}</textarea></label>
+        <div class="recibo-total" id="recTotal"></div>
         <div class="muted" style="font-size:12px; margin-top:4px;" id="recLetras"></div>
       </div>
       <div class="recibo-prev"><img id="recPrev" alt="Vista previa"></div>
@@ -2907,11 +2938,25 @@ function abrirRecibo(c, f){
   </div>`;
   let t = null;
   const refrescar = async () => {
-    m.querySelector("#recLetras").textContent = "Son PESOS " + numeroALetras(leerImporte(d.importe));
+    const tot = leerImporte(d.importe) + (d.gastos ? GASTOS_CONTABLE : 0);
+    m.querySelector("#recTotal").innerHTML = d.gastos
+      ? `Honorarios ${fmtMoney(leerImporte(d.importe))} + gastos estudio contable ${fmtMoney(GASTOS_CONTABLE)} = <b>TOTAL ${fmtMoney(tot)}</b>`
+      : `Total del recibo: <b>${fmtMoney(tot)}</b>`;
+    m.querySelector("#recLetras").textContent = "Son PESOS " + numeroALetras(tot);
+    const k = carDe(d.decreto);
+    m.querySelector("#recJuiHint").innerHTML = k ? "✓ Carátula del " + esc(d.decreto) + ": " + esc(k.texto)
+      : (cars.length ? "⚠️ Este actor no tiene carátula guardada con el " + esc(d.decreto) + ": completá el juicio a mano." : "⚠️ Este actor no tiene carátula guardada: completá el juicio a mano.");
+    m.querySelector("#recJuiHint").className = "recibo-hint " + (k ? "ok" : "no");
     try{ const {blob} = generarRecibo(d); const png = await pdfAImagen(blob);
       const img = m.querySelector("#recPrev"); if(img.src) URL.revokeObjectURL(img.src); img.src = URL.createObjectURL(png); }catch(e){}
   };
-  m.querySelectorAll("[data-r]").forEach(inp => inp.addEventListener("input", () => { d[inp.dataset.r] = inp.value; clearTimeout(t); t = setTimeout(refrescar, 350); }));
+  m.querySelectorAll("[data-r]").forEach(inp => inp.addEventListener("input", () => { d[inp.dataset.r] = inp.value; if(inp.dataset.r === "juicio") d.expte = ""; clearTimeout(t); t = setTimeout(refrescar, 350); }));
+  m.querySelector("[data-dec]").addEventListener("change", e => {
+    d.decreto = e.target.value; const k = carDe(d.decreto);
+    d.juicio = k ? k.juicio : ""; d.expte = k ? k.expte : "";
+    m.querySelector('[data-r="juicio"]').value = d.juicio; refrescar();
+  });
+  m.querySelector("[data-gastos]").addEventListener("change", e => { d.gastos = e.target.checked; refrescar(); });
   m.querySelector('[data-a="cerrar"]').addEventListener("click", () => m.remove());
   m.querySelector('[data-a="bajar"]').addEventListener("click", () => { const {blob, archivo} = generarRecibo(d); bajarBlob(blob, archivo); });
   m.querySelector('[data-a="copiar"]').addEventListener("click", () => {
@@ -2928,7 +2973,7 @@ function abrirRecibo(c, f){
   m.querySelector('[data-a="wa"]').addEventListener("click", async () => {
     const {blob, archivo} = generarRecibo(d);
     const file = new File([blob], archivo, {type: "application/pdf"});
-    const texto = `Estimado/a ${d.nombre}: le enviamos el recibo de pago por ${fmtMoney(leerImporte(d.importe))}` +
+    const texto = `Estimado/a ${d.nombre}: le enviamos el recibo de pago por ${fmtMoney(leerImporte(d.importe) + (d.gastos ? GASTOS_CONTABLE : 0))}` +
       (d.decreto ? ` (${d.decreto})` : "") + `.\n\nEstudio Jurídico Günsberg - Lamedica - Cabouli.`;
     if(navigator.canShare && navigator.canShare({files: [file]})){
       try{ await navigator.share({files: [file], title: archivo, text: texto}); return; }
