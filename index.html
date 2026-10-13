@@ -202,7 +202,12 @@
   .fecha-row .err{color:var(--danger); font-size:12px; font-weight:600;}
   .fecha-row .aviso{color:var(--warn); font-size:12px;}
   .wa-pill.wa-dudoso{background:#f59e0b;}
+  .wa-par{display:inline-flex; align-items:center; gap:3px; margin:2px 4px 2px 0; white-space:nowrap;}
+  .wa-par .wa-pill{margin:0;}
+  .wa-ok{background:#16a34a; color:#fff; border:none; border-radius:50%; width:28px; height:28px; padding:0; font-size:16px; font-weight:900; line-height:28px; cursor:pointer; flex:0 0 auto;}
+  .wa-ok:hover{background:#15803d;}
   textarea.comentario{background:#fffbe6; color:#222; border:1px solid #f59e0b; border-radius:6px; padding:6px; font-family:inherit; font-size:12px; resize:vertical;}
+  .bdg-nuevo{background:#7c3aed; color:#fff; font-size:10px; font-weight:800; padding:2px 6px; border-radius:5px;}
   .verif{color:#ef4444; font-weight:800; font-size:10.5px; letter-spacing:.03em; cursor:help;}
   .rev-btn{
     width:34px; height:34px; border-radius:8px; border:none; font-weight:800; font-size:16px;
@@ -1300,12 +1305,12 @@ function analyzePhone(phoneRaw){
   // el WhatsApp marcado como "a confirmar" (si no tiene WhatsApp, la app lo avisa al abrir el chat).
   let b2 = body.startsWith("54") && body.length === 12 ? body.slice(2) : body;
   if(b2.length === 10 && !b2.startsWith("0")){
-    return {display: (hadZero?"0":"") + b2, link: "https://wa.me/549" + b2, dudoso: true};
+    return {display: (hadZero?"0":"") + b2, link: "https://wa.me/549" + b2, dudoso: !celConfirmado(b2), clave: b2};
   }
   // 8 digitos de CABA/GBA que NO empiezan con 4 (los fijos suelen empezar con 4):
   // suele ser un celular agendado sin el 15 -> WhatsApp "a confirmar" con area 11.
   if(body.length === 8 && !body.startsWith("4")){
-    return {display: body, link: "https://wa.me/54911" + body, dudoso: true};
+    return {display: body, link: "https://wa.me/54911" + body, dudoso: !celConfirmado("11" + body), clave: "11" + body};
   }
   return {display: raw, link: null};
 }
@@ -1364,11 +1369,34 @@ function telefonosUnicos(telefono){
 
 // Arma el HTML de los botones de WhatsApp (uno por numero que sea celular) para la tabla en pantalla,
 // cada uno con el mensaje automatico de aviso de pago ya precargado para ese cliente.
+// ---------- Celulares confirmados a mano (tilde verde al lado del numero naranja) ----------
+const CEL_ID = "__celulares_confirmados__";
+function celConfirmado(clave){
+  try{ const c = ARCHIVO && ARCHIVO[CEL_ID]; return !!(c && c.filas.some(f => f._k === clave && !f.borrado)); }catch(e){ return false; }
+}
+function confirmarCelular(clave){
+  if(!ARCHIVO[CEL_ID]) ARCHIVO[CEL_ID] = {id: CEL_ID, complementaria: "", anio: "", fechaPago: "", mod: Date.now(), filas: []};
+  const c = ARCHIVO[CEL_ID];
+  if(!c.filas.some(f => f._k === clave && !f.borrado)) c.filas.push({_k: clave, mod: Date.now()});
+  c.mod = Date.now();
+  guardarArchivo();
+  // se redibuja lo que este a la vista
+  try{ if(results.length) renderTable(); }catch(_){}
+  try{ if(document.getElementById("tabArchivo").style.display !== "none") renderArchivo(); }catch(_){}
+  try{ if(document.getElementById("tabDeudores").style.display !== "none") renderDeudores(); }catch(_){}
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest && e.target.closest("[data-celok]");
+  if(!b) return;
+  e.preventDefault(); e.stopPropagation();
+  confirmarCelular(b.dataset.celok);
+}, true);
+
 function waButtonsHtml(r){
   return telefonosUnicos(r.telefono).map(({p, a}) => {
     if(!a.link) return "";
     const link = waLinkWithMessage(p, r);
-    if(a.dudoso) return `<a href="${link}" target="_blank" class="wa-pill wa-dudoso" title="No se puede confirmar que sea celular (número sin 15). Si no tiene WhatsApp, la app te avisa al abrir el chat.">❔ ${a.display}</a>`;
+    if(a.dudoso) return `<span class="wa-par"><a href="${link}" target="_blank" class="wa-pill wa-dudoso" title="No se puede confirmar que sea celular (número sin 15). Si no tiene WhatsApp, la app te avisa al abrir el chat.">❔ ${a.display}</a><button class="wa-ok" data-celok="${a.clave}" title="Tocá si confirmaste que este número es celular / tiene WhatsApp: pasa a verde en todo el programa">✓</button></span>`;
     return `<a href="${link}" target="_blank" class="wa-pill" title="Enviar WhatsApp con mensaje de aviso">💬 ${a.display}</a>`;
   }).join("");
 }
@@ -1928,7 +1956,7 @@ function migrarArchivo(A){
 }
 const ahoraMs = () => Date.now();
 function filasVivas(c){ return (c.filas || []).filter(f => !f.borrado); }
-function compsVivas(){ return Object.values(ARCHIVO).filter(c => !c.borrado); }
+function compsVivas(){ return Object.values(ARCHIVO).filter(c => !c.borrado && c.id !== CEL_ID); }
 let _guardarTimer = null;
 let _desdeNube = false;   // true cuando el guardado local viene de una bajada de la nube (no hace falta volver a subir)
 function guardarArchivo(){
@@ -1981,33 +2009,36 @@ function archivarResultados(){
   results.forEach(r => { const id = idComplementaria(r); if(!grupos.has(id)) grupos.set(id, []); grupos.get(id).push(r); });
   const ahora = new Date().toISOString(), ms = ahoraMs();
   const CAMPOS = ["doctype","docnum","name","telefono","caratula","beneficio","expte","bruto","desc","neto","dudoso","verificado","complementaria","fechaPago"];
+  const agregados = [];
   grupos.forEach((filas, id) => {
     const prev = ARCHIVO[id] && !ARCHIVO[id].borrado ? ARCHIVO[id] : null;
-    const previas = new Map((prev ? prev.filas : []).map(f => [f._k, f]));
-    const nuevas = filas.map(r => {
-      const k = claveFila(r), e = previas.get(k);
-      const datos = { doctype: r.doctype||"", docnum: r.docnum||"", name: r.name||"", telefono: r.telefono||"",
+    const datosDe = r => ({ doctype: r.doctype||"", docnum: r.docnum||"", name: r.name||"", telefono: r.telefono||"",
                caratula: r.caratula||"", beneficio: r.beneficio||"", expte: r.expte||"",
                bruto: r.bruto||0, desc: r.desc||0, neto: r.neto||0, dudoso: !!r.dudoso, verificado: r.verificado||"",
-               complementaria: r.complementaria||"", fechaPago: r.fechaPago||"" };
-      if(e && !e.borrado){
-        // ya estaba: se conservan tildes y comentarios; solo cambia la marca de tiempo si cambiaron los datos
-        const cambio = CAMPOS.some(c => String(e[c] ?? "") !== String(datos[c] ?? ""));
-        return Object.assign({}, e, cambio ? datos : {}, { mod: cambio ? ms : e.mod });
+               complementaria: r.complementaria||"", fechaPago: (prev && prev.fechaPago) || r.fechaPago||"" });
+    if(prev){
+      // La complementaria YA estaba guardada: no se toca nada de lo editado (tildes, comentarios,
+      // montos, telefonos, actores quitados o agregados a mano). Solo se SUMAN los actores nuevos.
+      const yaEstan = new Set(prev.filas.map(f => f._k));
+      const nuevos = filas.filter(r => !yaEstan.has(claveFila(r)))
+        .map(r => Object.assign(datosDe(r), { _k: claveFila(r), hon: "", cont: "", obs: "", mod: ms, nuevo: true }));
+      if(nuevos.length){
+        prev.filas = prev.filas.concat(nuevos); prev.mod = ms; prev.actualizado = ahora;
+        agregados.push(`${prev.complementaria || id}: ${nuevos.length} (${nuevos.map(f => nombreLindo(f.name)).join(", ")})`);
       }
-      return Object.assign(datos, { _k: k, hon: "", cont: "", obs: "", mod: ms });
-    });
-    // filas que estaban y ya no vienen en la descarga: se marcan como quitadas
-    const enNuevas = new Set(nuevas.map(f => f._k));
-    const quitadas = (prev ? prev.filas : []).filter(f => !enNuevas.has(f._k))
-      .map(f => f.borrado ? f : Object.assign({}, f, { borrado: true, mod: ms }));
+      return;
+    }
     ARCHIVO[id] = {
       id, complementaria: filas[0].complementaria || "", fechaPago: filas[0].fechaPago || "",
       anio: anioDeComplementaria(filas[0].complementaria, filas[0].fechaPago),
-      guardado: prev ? prev.guardado : ahora, actualizado: ahora, mod: ms,
-      filas: nuevas.concat(quitadas)
+      guardado: ahora, actualizado: ahora, mod: ms,
+      filas: filas.map(r => Object.assign(datosDe(r), { _k: claveFila(r), hon: "", cont: "", obs: "", mod: ms }))
     };
   });
+  if(agregados.length){
+    try{ log("➕ Se sumaron actores nuevos a complementarias ya guardadas (lo que ya estaba editado no se tocó): " + agregados.join(" · ")); }catch(_){}
+    setTimeout(() => alert("Se sumaron actores nuevos a complementarias que ya tenías guardadas.\nLo que ya habías editado quedó igual.\n\n" + agregados.join("\n")), 50);
+  }
   guardarArchivo();
   if(document.getElementById("tabArchivo").style.display !== "none") renderArchivo();
   return grupos.size;
@@ -2134,7 +2165,7 @@ function _renderArchivo(cont){
             const f = borrador || fGuardada;
             const pag = f.hon === "abono" ? " pagado" : "";
             html += `<tr class="arch-fila${pag}${borrador ? " sin-guardar" : ""}" data-id="${esc(c.id)}" data-i="${i}">
-              <td class="num col-num">${f.dudoso ? '<span class="verif">VERIFICAR</span> ' : ''}${filas.findIndex(x => x.i === i) + 1}
+              <td class="num col-num">${f.nuevo ? '<span class="bdg-nuevo">NUEVO</span> ' : ''}${f.dudoso ? '<span class="verif">VERIFICAR</span> ' : ''}${filas.findIndex(x => x.i === i) + 1}
                 <button class="btn-compartir" data-compartir="1" title="Genera un PDF con la liquidación para mandarle al cliente">📄 PARA COMPARTIR AL CLIENTE</button></td>
               <td><input data-f="docnum" value="${esc(f.docnum)}" style="width:85px;"></td>
               <td><textarea data-f="name" rows="2" style="width:150px;">${esc(f.name)}</textarea></td>
@@ -2263,7 +2294,7 @@ function conectarArchivo(cont){
     tr.querySelector("[data-compartir]").addEventListener("click", () => abrirCompartir(c, BORRADORES.get(clave) || c.filas[i]));
     tr.querySelector("[data-guardarfila]").addEventListener("click", () => {
       if(BORRADORES.has(clave)){
-        c.filas[i] = Object.assign(BORRADORES.get(clave), { mod: ahoraMs() }); BORRADORES.delete(clave);
+        c.filas[i] = Object.assign(BORRADORES.get(clave), { mod: ahoraMs(), nuevo: false }); BORRADORES.delete(clave);
         guardarArchivo();
       }
       ultimaFilaGuardada = clave;
@@ -2424,7 +2455,7 @@ function generarPDFCliente(c, f, pct, jui){
   // cada punto: tramos de texto [texto, negrita]
   const PAGOS = [
     [["En nuestro Estudio Jurídico:", 1], [" para efectuar el pago correspondiente a nuestros honorarios profesionales, podrá acercarse a nuestras oficinas ubicadas en la calle ", 0], ["Av. Alicia Moreau de Justo N° 740, Piso 1, Of. 9, C.A.B.A. (CP 1107)", 1], [", de lunes a jueves en el horario de 10:00 a 20:00 hs.", 0]],
-    [["En la Mutual de Suboficiales de la PFA (Sede Central):", 1], [" asimismo, nos encuentra en la sede ubicada en la calle ", 0], ["Beauchef 1560, C.A.B.A.", 1], [", los días miércoles en el horario de 15:00 a 18:00 hs.", 0]],
+    [["En la Mutual de Suboficiales de la PFA (Sede Central):", 1], [" asimismo, nos encuentra en la sede ubicada en la calle ", 0], ["Beauchef 1560, C.A.B.A.", 1], [", los días miércoles en el horario de 15:00 a 17:00 hs.", 0]],
     [["Por transferencia bancaria:", 1], [" en caso de requerir efectuar el pago mediante transferencia bancaria, deberá solicitarnos oportunamente los datos de una cuenta a sus efectos, la cual podrá adicionar un recargo según corresponda.", 0]],
   ];
   const FS = 11.5, LH = FS * 1.22, anchoTxt = W - 2*M - 40;
