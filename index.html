@@ -73,7 +73,7 @@
   tr.pagado td:not(.estado):not(.col-num):not(.col-tel), tr.pagado td:not(.estado):not(.col-num):not(.col-tel) input, tr.pagado td:not(.estado):not(.col-num):not(.col-tel) textarea{text-decoration:line-through; text-decoration-thickness:2px;}
   tr.pagado td:not(.estado):not(.col-tel){opacity:.6;}
   tr.pagado td{background:#ecfdf3 !important;}
-  tr.repartido td{background:#e3eeff !important;}
+  tr.repartido td{background:#a9c8fa !important;}
   tr.repartido td:not(.estado):not(.col-num){opacity:1;}
   .tel-edit{background:#fff; border:1px solid #cbd5e1; border-radius:50%; width:28px; height:28px; padding:0; font-size:13px; line-height:26px; cursor:pointer; flex:0 0 auto; margin-left:4px;}
   .tel-edit:hover{background:#f1f5f9;}
@@ -91,7 +91,8 @@
   tr.sin-guardar td{background:#fff7e6 !important;}
   tr.sin-guardar td:first-child{box-shadow:inset 6px 0 0 #f59e0b;}
   tr.sin-guardar.pagado td:first-child{box-shadow:none;}
-  tr.arch-fila.repartido td{background:#e3eeff !important;}
+  tr.arch-fila.repartido td{background:#a9c8fa !important;}
+  tr.arch-fila.repartido td:first-child{box-shadow:inset 6px 0 0 #1d4ed8;}
   .ver-btn{background:#2563eb; color:#fff; font-weight:800; padding:8px 16px; font-size:13px; border-radius:8px; letter-spacing:.02em;}
   .ver-btn.abierto{background:#1e3a5f;}
   .arch-titulo{font-size:15px;}
@@ -1804,9 +1805,9 @@ function generarPDF(lista, opciones){
                 data.cell.styles.fontStyle = "bold";
               }
               if(data.column.index === 0){
-                // lugar para el boton "PARA COMPARTIR AL CLIENTE" debajo del numero
+                // lugar para el boton "TOCAR PARA COMPARTIR AL CLIENTE" debajo del numero
                 data.cell.styles.valign = "top";
-                data.cell.styles.minCellHeight = Math.max(data.cell.styles.minCellHeight || 0, 44);
+                data.cell.styles.minCellHeight = Math.max(data.cell.styles.minCellHeight || 0, 50);
               }
               if(data.column.index === 3){
                 const n = telInfo[data.row.index].length;
@@ -1875,11 +1876,12 @@ function generarPDF(lista, opciones){
             }
             if(r){
               // boton con enlace: abre el programa directo en "Para compartir al cliente" de este actor
-              const bw = data.cell.width - 8, bh = 19, bx = data.cell.x + 4, by = data.cell.y + data.cell.height - bh - 4;
+              const bw = data.cell.width - 8, bh = 25, bx = data.cell.x + 4, by = data.cell.y + data.cell.height - bh - 4;
               doc.setFillColor(15,118,110); doc.roundedRect(bx, by, bw, bh, 3, 3, "F");
               doc.setTextColor(255,255,255); doc.setFont(undefined, "bold"); doc.setFontSize(5.4);
-              doc.text("PARA COMPARTIR", bx + bw/2, by + 8, {align: "center"});
-              doc.text("AL CLIENTE", bx + bw/2, by + 14.5, {align: "center"});
+              doc.text("TOCAR PARA", bx + bw/2, by + 8, {align: "center"});
+              doc.text("COMPARTIR", bx + bw/2, by + 14.5, {align: "center"});
+              doc.text("AL CLIENTE", bx + bw/2, by + 21, {align: "center"});
               doc.link(bx, by, bw, bh, {url: enlaceCompartir(r)});
               doc.setFont(undefined, "normal");
             }
@@ -1964,7 +1966,7 @@ function migrarArchivo(A){
   });
 }
 const ahoraMs = () => Date.now();
-function filasVivas(c){ return (c.filas || []).filter(f => !f.borrado); }
+function filasVivas(c){ return ordenarFilasAlfabetico((c.filas || []).filter(f => !f.borrado)); }
 function compsVivas(){ return Object.values(ARCHIVO).filter(c => !c.borrado && c.id !== CEL_ID); }
 let _guardarTimer = null;
 let _desdeNube = false;   // true cuando el guardado local viene de una bajada de la nube (no hace falta volver a subir)
@@ -2151,7 +2153,8 @@ function _renderArchivo(cont){
         <span class="muted">— ${lista.length} complementaria${lista.length===1?"":"s"} · pendiente de cobro (15%): ${fmtMoney(pend15)}</span></div>`;
     if(!cerrado){
       lista.forEach(c => {
-        const filas = c.filas.map((f,i) => ({f,i})).filter(({f}) => !f.borrado).filter(({f}) => !q ||
+        const claveOrden = f => stripAccents(f.name || "").toUpperCase().replace(/[^A-Z ,]/g, "").trim();
+        const filas = c.filas.map((f,i) => ({f,i})).sort((a,b) => claveOrden(a.f).localeCompare(claveOrden(b.f), "es")).filter(({f}) => !f.borrado).filter(({f}) => !q ||
           stripAccents(f.name||"").toUpperCase().includes(q) || (f.docnum||"").includes(q));
         if(q && !filas.length) return;
         const t = totalesComp(c);
@@ -2181,7 +2184,7 @@ function _renderArchivo(cont){
             const pag = (f.hon === "abono" ? " pagado" : "") + (f.rep ? " repartido" : "");
             html += `<tr class="arch-fila${pag}${borrador ? " sin-guardar" : ""}" data-id="${esc(c.id)}" data-i="${i}">
               <td class="num col-num">${f.nuevo ? '<span class="bdg-nuevo">NUEVO</span> ' : ''}${f.dudoso ? '<span class="verif">VERIFICAR</span> ' : ''}${filas.findIndex(x => x.i === i) + 1}
-                <button class="btn-compartir" data-compartir="1" title="Genera un PDF con la liquidación para mandarle al cliente">📄 PARA COMPARTIR AL CLIENTE</button></td>
+                <button class="btn-compartir" data-compartir="1" title="Genera un PDF con la liquidación para mandarle al cliente">TOCAR PARA COMPARTIR AL CLIENTE</button></td>
               <td><input data-f="docnum" value="${esc(f.docnum)}" style="width:85px;"></td>
               <td><textarea data-f="name" rows="2" style="width:150px;">${esc(f.name)}</textarea></td>
               <td class="col-tel"><textarea data-f="telefono" rows="${Math.max(1, phoneLines(f.telefono).length)}" style="width:125px;" placeholder="Escribí o pegá teléfonos (uno por renglón)">${esc(phoneLines(f.telefono).join("\n"))}</textarea>
