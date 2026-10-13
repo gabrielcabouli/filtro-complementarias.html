@@ -91,6 +91,7 @@
   tr.sin-guardar td{background:#fff7e6 !important;}
   tr.sin-guardar td:first-child{box-shadow:inset 6px 0 0 #f59e0b;}
   tr.sin-guardar.pagado td:first-child{box-shadow:none;}
+  tr.arch-fila.repartido td{background:#e3eeff !important;}
   .ver-btn{background:#2563eb; color:#fff; font-weight:800; padding:8px 16px; font-size:13px; border-radius:8px; letter-spacing:.02em;}
   .ver-btn.abierto{background:#1e3a5f;}
   .arch-titulo{font-size:15px;}
@@ -2007,6 +2008,10 @@ function anioDeComplementaria(comp, fecha){
   return f ? f[1] : "Sin año";
 }
 function idComplementaria(r){ return r.complementaria || ("SIN-COMPLEMENTARIA " + (r.fechaPago || "")); }
+function ordenarFilasAlfabetico(filas){
+  const k = f => stripAccents(f.name || "").toUpperCase().replace(/[^A-Z ,]/g, "").trim();
+  return filas.slice().sort((a, b) => k(a).localeCompare(k(b), "es"));
+}
 function claveFila(r){ return (r.docnum || "") + "|" + (r.beneficio || "") + "|" + (r.name || ""); }
 
 // Guarda (o actualiza) en el archivo las complementarias de la tabla actual.
@@ -2031,7 +2036,8 @@ function archivarResultados(){
       const nuevos = filas.filter(r => !yaEstan.has(claveFila(r)))
         .map(r => Object.assign(datosDe(r), { _k: claveFila(r), hon: "", cont: "", obs: "", mod: ms, nuevo: true }));
       if(nuevos.length){
-        prev.filas = prev.filas.concat(nuevos); prev.mod = ms; prev.actualizado = ahora;
+        if(pendientesDe(id)) guardarBorradoresDe(id);
+        prev.filas = ordenarFilasAlfabetico(prev.filas.concat(nuevos)); prev.mod = ms; prev.actualizado = ahora;
         agregados.push(`${prev.complementaria || id}: ${nuevos.length} (${nuevos.map(f => nombreLindo(f.name)).join(", ")})`);
       }
       return;
@@ -2250,7 +2256,8 @@ async function agregarNuevosDesdePDF(id, file, btn){
       complementaria: c.complementaria||r.complementaria||"", fechaPago: c.fechaPago||r.fechaPago||"",
       _k: claveFila(r), hon: "", cont: "", obs: "", mod: ms, nuevo: true }));
     if(!nuevos.length){ alert(`No hay actores nuevos para sumar a la complementaria ${c.complementaria}.\nTodos los clientes que figuran en el PDF ya están cargados.`); return; }
-    c.filas = c.filas.concat(nuevos); c.mod = ms; c.actualizado = new Date().toISOString();
+    if(pendientesDe(id)) guardarBorradoresDe(id);   // se guardan antes de reordenar
+    c.filas = ordenarFilasAlfabetico(c.filas.concat(nuevos)); c.mod = ms; c.actualizado = new Date().toISOString();
     guardarArchivo(); archAbiertos.add(id); renderArchivo();
     alert(`Se sumaron ${nuevos.length} actores nuevos a la complementaria ${c.complementaria} (aparecen al final con la etiqueta NUEVO):\n\n` +
       nuevos.map(f => "• " + nombreLindo(f.name) + (f.dudoso ? "  (VERIFICAR)" : "")).join("\n") + "\n\nLo que ya tenías editado quedó igual.");
