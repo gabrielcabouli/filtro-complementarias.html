@@ -194,6 +194,7 @@
   .comp-pct-t{font-size:13px; font-weight:700; color:#92400e; margin-bottom:6px;}
   .comp-pct label{display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:8px; cursor:pointer; font-size:15px;}
   .comp-pct label.sel{background:#fde68a;}
+  .recibo-pct{margin-top:10px; padding:6px 10px;} .modal .recibo-pct label{padding:5px 8px; margin-top:2px; font-size:14px;}
   .modal .comp-pct label{display:flex; justify-content:flex-start; margin-top:4px; color:#1e293b; font-size:15px; font-weight:400;}
   .modal .comp-pct label input{display:inline-block; width:20px; height:20px; margin:0; padding:0; flex:0 0 auto;}
   .tab-count.deu{background:#dc2626;}
@@ -2915,6 +2916,11 @@ function abrirRecibo(c, f){
           <label style="flex:1;">Fecha<input data-r="fecha" value="${esc(d.fecha)}"></label>
         </div>
         <label>Decreto abonado<select data-dec="1" class="recibo-sel">${DECRETOS_RECIBO.map(x => `<option ${x === d.decreto ? "selected" : ""}>${x}</option>`).join("")}</select></label>
+        <div class="comp-pct recibo-pct">
+          <div class="comp-pct-t">Honorarios (sobre el importe bruto de ${fmtMoney(f.bruto || 0)}):</div>
+          <label class="sel"><input type="radio" name="recPct" value="15"> <b>15%</b> = ${fmtMoney((f.bruto||0)*0.15)}</label>
+          <label class="sel"><input type="radio" name="recPct" value="20" checked> <b>20%</b> = ${fmtMoney((f.bruto||0)*0.20)}</label>
+        </div>
         <div class="row" style="gap:8px;">
           <label style="flex:1;">Importe ($)<input data-r="importe" value="${esc(d.importe)}"></label>
           <label style="flex:1.4;">Concepto<input data-r="concepto" value="${esc(d.concepto)}"></label>
@@ -2956,6 +2962,12 @@ function abrirRecibo(c, f){
     d.juicio = k ? k.juicio : ""; d.expte = k ? k.expte : "";
     m.querySelector('[data-r="juicio"]').value = d.juicio; refrescar();
   });
+  const marcarPct = () => m.querySelectorAll('input[name="recPct"]').forEach(r => r.closest("label").classList.toggle("sel", r.checked));
+  m.querySelectorAll('input[name="recPct"]').forEach(r => r.addEventListener("change", () => {
+    d.importe = fmtMoney((f.bruto || 0) * (+r.value) / 100).replace(/^\$\s*/, "");
+    m.querySelector('[data-r="importe"]').value = d.importe; marcarPct(); refrescar();
+  }));
+  marcarPct();
   m.querySelector("[data-gastos]").addEventListener("change", e => { d.gastos = e.target.checked; refrescar(); });
   m.querySelector('[data-a="cerrar"]').addEventListener("click", () => m.remove());
   m.querySelector('[data-a="bajar"]').addEventListener("click", () => { const {blob, archivo} = generarRecibo(d); bajarBlob(blob, archivo); });
