@@ -68,6 +68,7 @@
   .arch-tabla td{vertical-align:middle;}
   .chk{display:flex; align-items:center; gap:6px; font-size:10.5px; font-weight:800; padding:3px 6px; border-radius:5px; margin:2px 0; cursor:pointer; white-space:normal; line-height:1.15; width:150px;}
   .chk.ok{color:#15803d; background:#dcfce7; border:1px solid #86efac;} .chk.ok input{accent-color:#16a34a;}
+  .chk.rep{color:#1d4ed8; background:#dbeafe; border:1px solid #93c5fd; width:230px; margin-top:6px; justify-content:center; font-size:12px;} .chk.rep input{accent-color:#2563eb; width:18px; height:18px;}
   .chk.no{color:#b91c1c; background:#fee2e2; border:1px solid #fca5a5;} .chk.no input{accent-color:#dc2626;}
   tr.pagado td:not(.estado):not(.col-num), tr.pagado td:not(.estado):not(.col-num) input, tr.pagado td:not(.estado):not(.col-num) textarea{text-decoration:line-through; text-decoration-thickness:2px;}
   tr.pagado td:not(.estado){opacity:.6;}
@@ -1095,16 +1096,26 @@ async function extractRecords(file){
 // ---------------------------------------------------------------
 // Cruce contra la base de clientes
 // ---------------------------------------------------------------
+// La Caja corta los nombres a 30 caracteres ("BARATTA DE MAROTTA,LEONOR ADEL"): en ese caso la
+// ultima palabra puede estar incompleta y se acepta si es el comienzo de un nombre del contacto.
+let PALABRA_CORTADA = null;
+function tieneToken(set, t){
+  if(set.has(t)) return true;
+  if(PALABRA_CORTADA && t === PALABRA_CORTADA && t.length >= 2){
+    for(const x of set) if(x.length > t.length && x.startsWith(t)) return true;
+  }
+  return false;
+}
 function isMatch(apellidoTokens, nombreTokens, clientTokenSet){
   if(!apellidoTokens.length || clientTokenSet.size === 0) return false;
-  const apCommon = apellidoTokens.filter(t => clientTokenSet.has(t));
+  const apCommon = apellidoTokens.filter(t => tieneToken(clientTokenSet, t));
   if(apCommon.length < apellidoTokens.length){
     if(apellidoTokens.length <= 1 || apCommon.length / apellidoTokens.length < 0.8) return false;
   }
   // Exige que (casi) todos los nombres de pila coincidan, no solo uno — evita falsos positivos
   // como "MORENO, MARIO ANTONIO" matcheando con "MORENO, ERNESTO ANTONIO" solo por "ANTONIO".
   if(nombreTokens.length){
-    const nombreCommon = nombreTokens.filter(t => clientTokenSet.has(t));
+    const nombreCommon = nombreTokens.filter(t => tieneToken(clientTokenSet, t));
     if(nombreCommon.length / nombreTokens.length < 0.7) return false;
     // Chequeo inverso: si el cliente tiene nombres de pila "de mas" que el pago no menciona
     // (ej. pago dice "OMAR" y el cliente es "ALFONSO OMAR"), tambien se rechaza.
@@ -1126,6 +1137,8 @@ function matchClients(records){
       continue;
     }
 
+    const nomLimpio = (rec.name || "").replace(/\s+/g, " ").trim();
+    PALABRA_CORTADA = nomLimpio.length >= 29 ? (normalizeName(nomLimpio).slice(-1)[0] || null) : null;
     let apellidoStr, nombreStr;
     if(rec.name.includes(",")){
       [apellidoStr, nombreStr] = rec.name.split(/,(.+)/);
@@ -1171,6 +1184,28 @@ function matchClients(records){
         }
       }
     }
+    // Segunda pasada: contacto agendado con el nombre incompleto (ej. "RUSSO, DOMINGO" para
+    // "RUSSO, DOMINGO HECTOR"). Se agrega, pero siempre marcado VERIFICAR.
+    if(!found && nombreTokens.length >= 2){
+      for(let vi = 0; vi < apVariants.length && !found; vi++){
+        const apT = apVariants[vi];
+        const candidateIdx = new Set();
+        apT.forEach(t => (CLIENT_INDEX.get(t)||[]).forEach(i => candidateIdx.add(i)));
+        for(const idx of candidateIdx){
+          const c = CLIENTS_DB[idx];
+          if(c.soloZona) continue;
+          if(!apT.every(t => tieneToken(c.tokenSet, t))) continue;
+          const apSet = new Set(apT);
+          const dados = [...c.tokenSet].filter(t => !apSet.has(t));
+          if(!dados.length || dados.length >= nombreTokens.length) continue;
+          if(!dados.every(t => nombreTokens.includes(t))) continue;
+          if(dados[0] !== undefined && !nombreTokens.includes(dados[0])) continue;
+          found = true;
+          matched.push({...rec, clienteVcf: c.name, telefono: (c.phones||[]).join("\n"), caratulaDb: c.caratula||"", verificado: "nombre", casada: vi > 0, parcial: true});
+          break;
+        }
+      }
+    }
   }
   return matched;
 }
@@ -1195,6 +1230,7 @@ function marcarDudosos(list){
   list.forEach(r => {
     r.dudoso = false; r.motivoDuda = "";
     if(r.verificado === "dni") return;
+    if(r.parcial){ r.dudoso = true; r.motivoDuda = "En tus contactos está agendado con el nombre incompleto (" + (r.clienteVcf || "") + "): confirmá que sea la misma persona"; return; }
     if(r._leads.includes(r._own)) return;
     const socio = list.find(o => o !== r && (!r.juicio || !o.juicio || o.juicio === r.juicio) &&
                                  [...o._keys].some(k => r._keys.has(k)));
@@ -1979,7 +2015,7 @@ function archivarResultados(){
 
 function estadoTexto(r){
   const h = r.hon === "abono" ? "Honorarios: ABONÓ" : r.hon === "nopago" ? "Honorarios: NO PAGÓ" : "";
-  const c = r.cont === "pago" ? "Contador: PAGÓ" : r.cont === "nopago" ? "Contador: NO PAGÓ" : "";
+  const c = (r.cont === "pago" ? "Contador: PAGÓ" : r.cont === "nopago" ? "Contador: NO PAGÓ" : "") + (r.rep ? (r.cont ? " · " : "") + "REPARTIDO" : "");
   const o = (r.obs || "").trim() ? "Comentario: " + r.obs.trim() : "";
   return [[h, c].filter(Boolean).join(" · "), o].filter(Boolean).join("\n");
 }
@@ -2119,7 +2155,8 @@ function _renderArchivo(cont){
                 <label class="chk ok"><input type="checkbox" data-chk="cont" data-v="pago" ${f.cont==="pago"?"checked":""}> PAGÓ LIQUIDACIÓN CONTADOR</label>
                 <label class="chk no"><input type="checkbox" data-chk="cont" data-v="nopago" ${f.cont==="nopago"?"checked":""}> NO PAGÓ LIQUIDACIÓN CONTADOR</label>
               </td>
-              <td class="estado"><textarea data-f="obs" rows="4" class="comentario" placeholder="Escribí un comentario sobre este actor…" style="width:230px;">${esc(f.obs)}</textarea></td>
+              <td class="estado"><textarea data-f="obs" rows="4" class="comentario" placeholder="Escribí un comentario sobre este actor…" style="width:230px;">${esc(f.obs)}</textarea>
+                <label class="chk rep"><input type="checkbox" data-rep="1" ${f.rep ? "checked" : ""}> REPARTIDO</label></td>
               <td class="estado acciones-fila">
                 <button class="btn-guardar-fila${borrador ? " pendiente" : ""}" data-guardarfila="1">${borrador ? "💾 GUARDAR" : (ultimaFilaGuardada === c.id + "|" + i ? "✓ Guardado" : "💾 Guardar")}</button>
                 <button class="danger" data-delfila="1">Quitar</button>
@@ -2216,6 +2253,8 @@ function conectarArchivo(cont){
       });
       if(["bruto","desc","neto","telefono"].includes(inp.dataset.f)) inp.addEventListener("change", () => renderArchivo());
     });
+    const rep = tr.querySelector("[data-rep]");
+    if(rep) rep.addEventListener("change", () => { borrador().rep = rep.checked; renderArchivo(); });
     tr.querySelectorAll("[data-chk]").forEach(chk => chk.addEventListener("change", () => {
       const f = borrador(), k = chk.dataset.chk;
       f[k] = chk.checked ? chk.dataset.v : "";   // las dos opciones de cada grupo se excluyen entre si
