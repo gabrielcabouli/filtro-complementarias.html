@@ -70,9 +70,14 @@
   .chk.ok{color:#15803d; background:#dcfce7; border:1px solid #86efac;} .chk.ok input{accent-color:#16a34a;}
   .chk.rep{color:#1d4ed8; background:#dbeafe; border:1px solid #93c5fd; width:230px; margin-top:6px; justify-content:center; font-size:12px;} .chk.rep input{accent-color:#2563eb; width:18px; height:18px;}
   .chk.no{color:#b91c1c; background:#fee2e2; border:1px solid #fca5a5;} .chk.no input{accent-color:#dc2626;}
-  tr.pagado td:not(.estado):not(.col-num), tr.pagado td:not(.estado):not(.col-num) input, tr.pagado td:not(.estado):not(.col-num) textarea{text-decoration:line-through; text-decoration-thickness:2px;}
-  tr.pagado td:not(.estado){opacity:.6;}
+  tr.pagado td:not(.estado):not(.col-num):not(.col-tel), tr.pagado td:not(.estado):not(.col-num):not(.col-tel) input, tr.pagado td:not(.estado):not(.col-num):not(.col-tel) textarea{text-decoration:line-through; text-decoration-thickness:2px;}
+  tr.pagado td:not(.estado):not(.col-tel){opacity:.6;}
   tr.pagado td{background:#ecfdf3 !important;}
+  tr.repartido td{background:#e3eeff !important;}
+  tr.repartido td:not(.estado):not(.col-num){opacity:1;}
+  .tel-edit{background:#fff; border:1px solid #cbd5e1; border-radius:50%; width:28px; height:28px; padding:0; font-size:13px; line-height:26px; cursor:pointer; flex:0 0 auto; margin-left:4px;}
+  .tel-edit:hover{background:#f1f5f9;}
+  .tel-sin{font-size:13px; color:#475569; padding:4px 6px;}
   /* barra verde con "ABONÓ" vertical: honorarios abonados */
   tr.pagado td:first-child{position:relative; padding-left:42px; opacity:1;}
   tr.pagado td:first-child::before{content:"ABONÓ"; position:absolute; left:0; top:0; bottom:0; width:32px;
@@ -207,6 +212,8 @@
   .wa-ok{background:#16a34a; color:#fff; border:none; border-radius:50%; width:28px; height:28px; padding:0; font-size:16px; font-weight:900; line-height:28px; cursor:pointer; flex:0 0 auto;}
   .wa-ok:hover{background:#15803d;}
   textarea.comentario{background:#fffbe6; color:#222; border:1px solid #f59e0b; border-radius:6px; padding:6px; font-family:inherit; font-size:12px; resize:vertical;}
+  .btn-nuevos{background:#7c3aed; color:#fff; font-weight:800;}
+  .btn-nuevos:hover{background:#6d28d9;}
   .bdg-nuevo{background:#7c3aed; color:#fff; font-size:10px; font-weight:800; padding:2px 6px; border-radius:5px;}
   .verif{color:#ef4444; font-weight:800; font-size:10.5px; letter-spacing:.03em; cursor:help;}
   .rev-btn{
@@ -1392,12 +1399,13 @@ document.addEventListener("click", e => {
   confirmarCelular(b.dataset.celok);
 }, true);
 
-function waButtonsHtml(r){
+function waButtonsHtml(r, editar){
+  const lapiz = p => editar ? `<button class="tel-edit" data-teledit="${esc(p)}" title="Modificar o borrar este teléfono">✏️</button>` : "";
   return telefonosUnicos(r.telefono).map(({p, a}) => {
-    if(!a.link) return "";
+    if(!a.link) return editar ? `<span class="wa-par"><span class="tel-sin">${esc(p)}</span>${lapiz(p)}</span>` : "";
     const link = waLinkWithMessage(p, r);
-    if(a.dudoso) return `<span class="wa-par"><a href="${link}" target="_blank" class="wa-pill wa-dudoso" title="No se puede confirmar que sea celular (número sin 15). Si no tiene WhatsApp, la app te avisa al abrir el chat.">❔ ${a.display}</a><button class="wa-ok" data-celok="${a.clave}" title="Tocá si confirmaste que este número es celular / tiene WhatsApp: pasa a verde en todo el programa">✓</button></span>`;
-    return `<a href="${link}" target="_blank" class="wa-pill" title="Enviar WhatsApp con mensaje de aviso">💬 ${a.display}</a>`;
+    if(a.dudoso) return `<span class="wa-par"><a href="${link}" target="_blank" class="wa-pill wa-dudoso" title="No se puede confirmar que sea celular (número sin 15). Si no tiene WhatsApp, la app te avisa al abrir el chat.">❔ ${a.display}</a><button class="wa-ok" data-celok="${a.clave}" title="Tocá si confirmaste que este número es celular / tiene WhatsApp: pasa a verde en todo el programa">✓</button>${lapiz(p)}</span>`;
+    return (editar ? `<span class="wa-par">` : "") + `<a href="${link}" target="_blank" class="wa-pill" title="Enviar WhatsApp con mensaje de aviso">💬 ${a.display}</a>${lapiz(p)}` + (editar ? "</span>" : "");
   }).join("");
 }
 
@@ -2152,6 +2160,7 @@ function _renderArchivo(cont){
             <span class="row" style="gap:6px;">
               ${pendientesDe(c.id) ? `<button class="mini btn-guardar-todo" data-guardartodo="${esc(c.id)}">💾 GUARDAR TODOS LOS CAMBIOS</button>` : ""}
               <button class="secondary mini" data-pdf="${esc(c.id)}">⬇ DESCARGAR PDF</button>
+              <button class="mini btn-nuevos" data-nuevos="${esc(c.id)}" title="Elegí el PDF de la Caja de esta complementaria: se suman solo los actores que falten, sin tocar lo editado">➕ AGREGAR ACTORES NUEVOS</button>
               <button class="danger" data-delcomp="${esc(c.id)}">🗑 Eliminar</button>
             </span>
           </div>`;
@@ -2163,14 +2172,14 @@ function _renderArchivo(cont){
           filas.forEach(({f: fGuardada, i}) => {
             const borrador = BORRADORES.get(c.id + "|" + i);
             const f = borrador || fGuardada;
-            const pag = f.hon === "abono" ? " pagado" : "";
+            const pag = (f.hon === "abono" ? " pagado" : "") + (f.rep ? " repartido" : "");
             html += `<tr class="arch-fila${pag}${borrador ? " sin-guardar" : ""}" data-id="${esc(c.id)}" data-i="${i}">
               <td class="num col-num">${f.nuevo ? '<span class="bdg-nuevo">NUEVO</span> ' : ''}${f.dudoso ? '<span class="verif">VERIFICAR</span> ' : ''}${filas.findIndex(x => x.i === i) + 1}
                 <button class="btn-compartir" data-compartir="1" title="Genera un PDF con la liquidación para mandarle al cliente">📄 PARA COMPARTIR AL CLIENTE</button></td>
               <td><input data-f="docnum" value="${esc(f.docnum)}" style="width:85px;"></td>
               <td><textarea data-f="name" rows="2" style="width:150px;">${esc(f.name)}</textarea></td>
-              <td><textarea data-f="telefono" rows="${Math.max(1, phoneLines(f.telefono).length)}" style="width:125px;">${esc(phoneLines(f.telefono).join("\n"))}</textarea>
-                  <div>${waButtonsHtml(f)}</div></td>
+              <td class="col-tel"><textarea data-f="telefono" rows="${Math.max(1, phoneLines(f.telefono).length)}" style="width:125px;" placeholder="Escribí o pegá teléfonos (uno por renglón)">${esc(phoneLines(f.telefono).join("\n"))}</textarea>
+                  <div>${waButtonsHtml(f, true)}</div></td>
               <td><textarea data-f="caratula" rows="3" style="width:190px;">${esc((f.caratula||"").split("||").map(x=>x.trim()).join("\n"))}</textarea></td>
               <td><input data-f="beneficio" value="${esc(f.beneficio)}" style="width:85px;"></td>
               <td class="num"><input data-f="bruto" value="${(f.bruto||0).toFixed(2)}" style="width:88px;text-align:right;"></td>
@@ -2207,6 +2216,48 @@ function _renderArchivo(cont){
   SYNC.pintar();
 }
 
+// Lee el PDF de la Caja y SUMA a una complementaria ya guardada los clientes que todavia no estan.
+// No modifica nada de lo ya editado (tildes, comentarios, montos, actores borrados o agregados a mano).
+async function agregarNuevosDesdePDF(id, file, btn){
+  const c = ARCHIVO[id]; if(!c) return;
+  if(!PDFJS_OK || typeof pdfjsLib === "undefined"){ alert("No se pudo cargar el lector de PDF. Recargá la página (Ctrl+F5)."); return; }
+  const txt = btn ? btn.textContent : ""; if(btn){ btn.disabled = true; btn.textContent = "⏳ Leyendo PDF..."; }
+  try{
+    let recs = await extractRecords(file);
+    const norm = x => (x || "").replace(/\s+/g, "").toUpperCase();
+    const deEsta = recs.filter(r => norm(r.complementaria) === norm(c.complementaria));
+    if(!deEsta.length){
+      const otra = [...new Set(recs.map(r => r.complementaria).filter(Boolean))].join(", ") || "sin número";
+      if(!await preguntar("El PDF parece ser de otra complementaria",
+          `Este PDF es de la complementaria ${otra} y la guardada es ${c.complementaria || "sin número"}. ¿Sumar igual los actores nuevos a la ${c.complementaria}?`, "Sí, sumar igual")) return;
+    } else recs = deEsta;
+    const matched = dedupeExact(matchClients(recs)); marcarDudosos(matched);
+    const vivas = c.filas.filter(f => !f.borrado);
+    const yaK = new Set(c.filas.map(f => f._k));                     // incluye los que borraste: no vuelven
+    const yaDni = new Set(vivas.map(f => (f.docnum || "").replace(/\D/g, "")).filter(Boolean));
+    const nomK = n => normalizeName(n || "").slice().sort().join(" ");
+    const yaNom = new Set(vivas.map(f => nomK(f.name)));
+    const ms = ahoraMs();
+    const nuevos = matched.filter(r => {
+      if(yaK.has(claveFila(r))) return false;
+      const d = (r.docnum || "").replace(/\D/g, "");
+      if(d && yaDni.has(d)) return false;                            // ya lo tenias (quizas cargado a mano)
+      if(yaNom.has(nomK(r.name))) return false;
+      return true;
+    }).map(r => ({ doctype: r.doctype||"", docnum: r.docnum||"", name: r.name||"", telefono: r.telefono||"",
+      caratula: r.caratulaDb||"", beneficio: r.beneficio||"", expte: r.expte||"",
+      bruto: r.bruto||0, desc: r.desc||0, neto: r.neto||0, dudoso: !!r.dudoso, verificado: r.verificado||"",
+      complementaria: c.complementaria||r.complementaria||"", fechaPago: c.fechaPago||r.fechaPago||"",
+      _k: claveFila(r), hon: "", cont: "", obs: "", mod: ms, nuevo: true }));
+    if(!nuevos.length){ alert(`No hay actores nuevos para sumar a la complementaria ${c.complementaria}.\nTodos los clientes que figuran en el PDF ya están cargados.`); return; }
+    c.filas = c.filas.concat(nuevos); c.mod = ms; c.actualizado = new Date().toISOString();
+    guardarArchivo(); archAbiertos.add(id); renderArchivo();
+    alert(`Se sumaron ${nuevos.length} actores nuevos a la complementaria ${c.complementaria} (aparecen al final con la etiqueta NUEVO):\n\n` +
+      nuevos.map(f => "• " + nombreLindo(f.name) + (f.dudoso ? "  (VERIFICAR)" : "")).join("\n") + "\n\nLo que ya tenías editado quedó igual.");
+  }catch(e){ alert("No se pudo leer el PDF: " + e.message); }
+  finally{ if(btn && document.body.contains(btn)){ btn.disabled = false; btn.textContent = txt; } }
+}
+
 function conectarArchivo(cont){
   const b = cont.querySelector("#archBuscar");
   b.addEventListener("input", e => { archBusqueda = e.target.value; const pos = e.target.selectionStart; renderArchivo();
@@ -2231,6 +2282,11 @@ function conectarArchivo(cont){
       guardarBorradoresDe(c.id); renderArchivo();
     }
     generarPDF(filasVivas(c), {estado: true, nombre: `complementaria_${(c.complementaria||"sin-numero").replace(/\//g,"-")}_estado_pagos.pdf`});
+  }));
+  cont.querySelectorAll("[data-nuevos]").forEach(btn => btn.addEventListener("click", () => {
+    const inp = document.createElement("input"); inp.type = "file"; inp.accept = "application/pdf,.pdf";
+    inp.addEventListener("change", () => { if(inp.files[0]) agregarNuevosDesdePDF(btn.dataset.nuevos, inp.files[0], btn); });
+    inp.click();
   }));
   cont.querySelectorAll("[data-delcomp]").forEach(btn => btn.addEventListener("click", async () => {
     const c = ARCHIVO[btn.dataset.delcomp];
@@ -2284,6 +2340,18 @@ function conectarArchivo(cont){
       });
       if(["bruto","desc","neto","telefono"].includes(inp.dataset.f)) inp.addEventListener("change", () => renderArchivo());
     });
+    tr.querySelectorAll("[data-teledit]").forEach(b => b.addEventListener("click", e => {
+      e.preventDefault(); e.stopPropagation();
+      const viejo = b.dataset.teledit;
+      const nuevo = prompt("Modificá el teléfono (dejalo vacío para borrarlo):", viejo);
+      if(nuevo === null) return;
+      const f = borrador(); const lineas = phoneLines(f.telefono);
+      const pos = lineas.indexOf(viejo);
+      if(pos >= 0){ if(nuevo.trim()) lineas[pos] = nuevo.trim(); else lineas.splice(pos, 1); }
+      else if(nuevo.trim()) lineas.push(nuevo.trim());
+      f.telefono = lineas.join("\n");
+      renderArchivo();
+    }));
     const rep = tr.querySelector("[data-rep]");
     if(rep) rep.addEventListener("change", () => { borrador().rep = rep.checked; renderArchivo(); });
     tr.querySelectorAll("[data-chk]").forEach(chk => chk.addEventListener("change", () => {
