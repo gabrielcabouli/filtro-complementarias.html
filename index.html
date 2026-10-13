@@ -99,6 +99,8 @@
   .notif-estado{font-size:14px; color:#1e293b; margin-bottom:10px;}
   .notif-sig{display:block; width:100%; background:#16a34a; color:#fff; font-size:16px; font-weight:800; border:none; border-radius:10px; padding:14px; cursor:pointer; margin-bottom:12px;}
   .notif-sig:hover{background:#15803d;}
+  .notif-envio{border:2px solid #16a34a; background:#f0fdf4; border-radius:12px; padding:10px; margin-bottom:12px; text-align:center;}
+  .notif-envio-t{font-size:13.5px; color:#14532d; margin-bottom:8px;} .notif-envio .notif-sig{margin-bottom:6px;}
   .notif-lista{border:1px solid var(--border); border-radius:10px; max-height:46vh; overflow:auto;}
   .notif-fila{display:flex; align-items:center; gap:10px; padding:7px 10px; border-bottom:1px solid #eef2f7; font-size:13px;}
   .notif-fila input{width:18px; height:18px; flex:0 0 auto;}
@@ -3048,6 +3050,7 @@ function marcarNotificado(c, i, num, valor){
 function abrirNotificar(id){
   const c = ARCHIVO[id]; if(!c) return;
   const incluir = new Map();                       // los VERIFICAR arrancan destildados
+  let enviando = false;
   const m = document.createElement("div"); m.className = "modal-fondo";
   const fh = ms => { const d = new Date(ms); return d.toLocaleDateString("es-AR") + " " + d.toLocaleTimeString("es-AR", {hour: "2-digit", minute: "2-digit"}); };
   const pintar = () => {
@@ -3059,10 +3062,16 @@ function abrirNotificar(id){
     const sinCel = sinCelular(c);
     m.innerHTML = `<div class="modal notif-modal">
       <h3>📲 Notificar clientes por WhatsApp — Complementaria ${esc(c.complementaria || "")}</h3>
-      <div class="notif-ayuda">Se manda el mismo aviso que al tocar el teléfono verde. Tocá <b>ENVIAR SIGUIENTE</b>: se abre WhatsApp con el mensaje ya escrito, tocás <b>Enviar</b> y volvés acá para el próximo. Queda anotado a quién ya se le mandó (también en las otras PC).</div>
+      <div class="notif-ayuda">Se manda el mismo aviso que al tocar el teléfono verde a todos los <b>tildados</b>. WhatsApp exige tocar <b>Enviar</b> en cada chat: se abre el primero con el mensaje ya escrito, lo enviás, volvés acá y tocás <b>SIGUIENTE</b> (un solo toque por cliente). Queda anotado a quién ya se le mandó (también en las otras PC), así podés pausar y seguir otro día.</div>
       <div class="notif-barra"><div style="width:${elegidos.length ? Math.round(env*100/elegidos.length) : 0}%"></div></div>
       <div class="notif-estado"><b>${env}</b> de <b>${elegidos.length}</b> enviados${pend.length ? ` · faltan <b>${pend.length}</b>` : " · <b style='color:#15803d'>✓ ¡Listo, se notificó a todos!</b>"}</div>
-      ${sig ? `<button class="notif-sig" data-sig="1">▶ ENVIAR SIGUIENTE: ${esc(nombreLindo(sig.f.name))} · ${esc(sig.a.display)}</button>` : ""}
+      ${!sig ? "" : !enviando
+        ? `<button class="notif-sig" data-sig="1">▶ ENVIAR A TODOS LOS CLIENTES SELECCIONADOS (${pend.length})</button>`
+        : `<div class="notif-envio">
+             <div class="notif-envio-t">Enviando… <b>${env + 1} de ${elegidos.length}</b>. Después de tocar Enviar en WhatsApp, volvé y tocá:</div>
+             <button class="notif-sig" data-sig="1">📲 SIGUIENTE: ${esc(nombreLindo(sig.f.name))} · ${esc(sig.a.display)}</button>
+             <button class="secondary" data-pausa="1">⏸ Pausar</button>
+           </div>`}
       <div class="notif-lista">
         ${items.map(x => { const key = x.i + "|" + x.num, on = incluir.get(key);
           return `<div class="notif-fila${x.enviado ? " enviado" : ""}${on ? "" : " fuera"}">
@@ -3083,7 +3092,8 @@ function abrirNotificar(id){
       marcarNotificado(c, x.i, x.num, true); pintar();
     };
     const porKey = key => items.find(x => x.i + "|" + x.num === key);
-    if(sig) m.querySelector("[data-sig]").addEventListener("click", () => enviar(sig));
+    if(sig) m.querySelector("[data-sig]").addEventListener("click", () => { enviando = true; enviar(sig); });
+    const pz = m.querySelector("[data-pausa]"); if(pz) pz.addEventListener("click", () => { enviando = false; pintar(); });
     m.querySelectorAll("[data-uno]").forEach(b => b.addEventListener("click", () => enviar(porKey(b.dataset.uno))));
     m.querySelectorAll("[data-desh]").forEach(b => b.addEventListener("click", () => { const x = porKey(b.dataset.desh); marcarNotificado(c, x.i, x.num, false); pintar(); }));
     m.querySelectorAll("[data-inc]").forEach(b => b.addEventListener("change", () => { incluir.set(b.dataset.inc, b.checked); pintar(); }));
