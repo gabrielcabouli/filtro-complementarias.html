@@ -135,6 +135,7 @@
   .chk.mutual{color:#6d28d9; background:#ede9fe; border:1px solid #c4b5fd;} .chk.mutual input{accent-color:#7c3aed;}
   .chk.particular{color:#c2410c; background:#ffedd5; border:1px solid #fdba74;} .chk.particular input{accent-color:#ea580c;}
   tr.pagado .chk.tipo{text-decoration:none;}
+  .btn-agregar-comp{background:#7c3aed; color:#fff; font-weight:800;} .btn-agregar-comp:hover{background:#6d28d9;}
   .verif-btn{background:#fff; color:#dc2626; border:2px solid #dc2626; border-radius:6px; font-size:11px; font-weight:800; padding:3px 7px; cursor:pointer;}
   .verif-btn:hover{background:#dc2626; color:#fff;}
   .tel-edit{background:#fff; border:1px solid #cbd5e1; border-radius:50%; width:28px; height:28px; padding:0; font-size:13px; line-height:26px; cursor:pointer; flex:0 0 auto; margin-left:4px;}
@@ -447,6 +448,7 @@
     <button id="btnAddRow" class="secondary">+ Agregar fila manual</button>
     <button id="btnCSV" class="secondary">⬇ Descargar CSV</button>
     <button id="btnPDF">⬇ Descargar PDF</button>
+    <button id="btnAgregarComp" class="btn-agregar-comp" title="Guarda esta complementaria en COMPLEMENTARIAS POR AÑO (sin descargar nada)">📚 AGREGAR COMPLEMENTARIA</button>
   </div>
   <div class="note">Match por <b>✓ DNI</b> = 100% confiable. El resto matchea por nombre y aparece marcado <b>revisar</b> — revisá esas filas antes de dar el listado por bueno. La <b>CARÁTULA</b> se completa sola cuando el cliente tiene un juicio identificado en tu listado de casos (1.748 de 3.118 clientes la tienen) — si un cliente tiene más de un juicio (2140 y 380/17), aparecen los dos separados por "||" para que elijas el correcto y borres el resto. Si queda vacía, completala a mano.</div>
 </div>
@@ -1810,6 +1812,26 @@ const PDF_COLS = [
   {label:"20%",       w:6,  cls:"num"},
 ];
 
+document.getElementById("btnAgregarComp").addEventListener("click", () => {
+  if(!guardarFechasPendientes()) return;
+  if(!results.length){
+    alert("No hay ningún cliente en la tabla todavía — procesá un PDF primero (o revisá si el cruce encontró coincidencias).");
+    return;
+  }
+  const ids = [...new Set(results.map(idComplementaria))];
+  const yaEstaban = ids.filter(id => ARCHIVO[id] && !ARCHIVO[id].borrado);
+  archivarResultados();     // si ya estaba guardada, solo suma los actores nuevos sin tocar lo editado
+  ids.forEach(id => archAbiertos.add(id));
+  document.querySelector('.tabs .tab[data-tab="tabArchivo"]').click();
+  setTimeout(() => {
+    const card = document.querySelector(`.arch-comp[data-id="${CSS.escape(ids[0])}"]`);
+    if(card) card.scrollIntoView({behavior: "smooth", block: "start"});
+    const nuevas = ids.filter(id => !yaEstaban.includes(id));
+    const msg = (nuevas.length ? "✓ Complementaria agregada: " + nuevas.map(id => ARCHIVO[id].complementaria || id).join(", ") : "") +
+                (yaEstaban.length ? (nuevas.length ? "\n" : "") + "Ya estaba guardada: " + yaEstaban.map(id => ARCHIVO[id].complementaria || id).join(", ") + " (se sumaron los actores nuevos, si había)." : "");
+    if(msg && !yaEstaban.length) alert(msg); else if(msg) log(msg);
+  }, 150);
+});
 document.getElementById("btnPDF").addEventListener("click", () => {
   if(!guardarFechasPendientes()) return;
   if(!results.length){
