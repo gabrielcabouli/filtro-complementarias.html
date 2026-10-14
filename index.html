@@ -3235,6 +3235,7 @@ function abrirReparto(c, f, clave){
       <label class="rep-jz"><span>Juzgado</span>
         <select data-jz>${["", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => `<option value="${n}" ${r.j === n ? "selected" : ""}>${n || "—"}</option>`).join("")}</select>
       </label>
+      ${f.cont === "pago" ? `<div class="rep-gastos">SEPARAR GASTOS ESTUDIO CONTABLE $${GASTOS_CONTABLE.toLocaleString("es-AR")}<small>(no incluidos en el reparto)</small></div>` : ""}
       ${r.filas ? `<table class="rep-tab"><thead><tr><th>Integrante</th><th class="num">%</th><th class="num">Monto</th></tr></thead><tbody>${filasHtml}</tbody></table>`
                 : `<div class="recibo-hint no">⚠️ Falta el juzgado: elegilo arriba para ver el reparto.</div>`}
       <div class="actions rep-actions"><button class="rep-cerrar" data-a="cerrar">CERRAR</button></div>
@@ -3295,6 +3296,8 @@ function abrirReparto(c, f, clave){
     .rep-actions{justify-content:flex-end}
     .rep-cerrar{background:#1e3a5f;color:#fff;border:none;border-radius:10px;padding:10px 22px;font:800 13px "IBM Plex Sans",system-ui,sans-serif;letter-spacing:.06em;cursor:pointer;box-shadow:0 4px 12px rgba(30,58,95,.3)}
     .rep-cerrar:hover{background:#2563eb}
+    .rep-gastos{background:#9d174d;color:#fff;border-radius:12px;padding:12px 14px;font:800 14px "IBM Plex Sans",system-ui,sans-serif;letter-spacing:.04em;text-transform:uppercase;box-shadow:0 4px 12px rgba(157,23,77,.3)}
+    .rep-gastos small{display:block;text-transform:none;font-weight:600;letter-spacing:0;font-size:12px;margin-top:3px;opacity:.92}
     @media (max-width:480px){ .rep-cards{grid-template-columns:1fr} .rep-head h3{font-size:19px} }`;
   document.head.appendChild(s);
 })();
