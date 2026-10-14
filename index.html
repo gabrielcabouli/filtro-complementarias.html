@@ -2225,7 +2225,7 @@ function archivarResultados(){
 
 function estadoTexto(r){
   const h = r.hon === "abono" ? "Honorarios: ABONÓ" : r.hon === "nopago" ? "Honorarios: NO PAGÓ" : "";
-  const c = (r.cont === "pago" ? "Contador: PAGÓ" : r.cont === "nopago" ? "Contador: NO PAGÓ" : "") + (r.rep ? (r.cont ? " · " : "") + "REPARTIDO" : "");
+  const c = (r.cont === "pago" ? "Contador: ABONÓ" : r.cont === "nopago" ? "Contador: NO ABONÓ" : "") + (r.rep ? (r.cont ? " · " : "") + "REPARTIDO" : "");
   const o = (r.obs || "").trim() ? "Comentario: " + r.obs.trim() : "";
   return [[h, c].filter(Boolean).join(" · "), o].filter(Boolean).join("\n");
 }
@@ -2360,7 +2360,7 @@ function _renderArchivo(cont){
               <td><textarea data-f="name" rows="2" style="width:150px;">${esc(f.name)}</textarea>
                 <label class="chk tipo mutual"><input type="checkbox" data-chk="tipo" data-v="mutual" ${f.tipo==="mutual"?"checked":""}> CLIENTE MUTUAL</label>
                 <label class="chk tipo particular"><input type="checkbox" data-chk="tipo" data-v="particular" ${f.tipo==="particular"?"checked":""}> CLIENTE PARTICULAR</label></td>
-              <td class="col-tel"><textarea data-f="telefono" rows="${Math.max(1, phoneLines(f.telefono).length)}" style="width:125px;" placeholder="Escribí o pegá teléfonos (uno por renglón)">${esc(phoneLines(f.telefono).join("\n"))}</textarea>
+              <td class="col-tel"><div class="tel-wrap"><textarea data-f="telefono" rows="${Math.max(1, phoneLines(f.telefono).length)}" style="width:125px;" placeholder="Escribí o pegá teléfonos (uno por renglón)">${esc(phoneLines(f.telefono).join("\n"))}</textarea><button type="button" class="btn-copiar-aviso" data-copiar-aviso="1" title="Copia el mensaje de aviso para pegarlo en WhatsApp">COPIAR AVISO CLIENTE</button></div>
                   <div>${waButtonsHtml(f, true)}</div></td>
               <td><textarea data-f="caratula" rows="3" style="width:190px;">${esc((f.caratula||"").split("||").map(x=>x.trim()).join("\n"))}</textarea>${pjnBotones(f)}</td>
               <td><input data-f="beneficio" value="${esc(f.beneficio)}" style="width:85px;"></td>
@@ -2371,11 +2371,11 @@ function _renderArchivo(cont){
               <td class="num">${fmtMoney((f.bruto||0)*0.20)}</td>
               <td class="estado">
                 <label class="chk ok"><input type="checkbox" data-chk="hon" data-v="abono" ${f.hon==="abono"?"checked":""}> ABONÓ HONORARIOS</label>
-                <label class="chk no"><input type="checkbox" data-chk="hon" data-v="nopago" ${f.hon==="nopago"?"checked":""}> NO PAGÓ HONORARIOS</label>
+                <label class="chk no"><input type="checkbox" data-chk="hon" data-v="nopago" ${f.hon==="nopago"?"checked":""}> NO ABONÓ HONORARIOS</label>
               </td>
               <td class="estado">
-                <label class="chk ok"><input type="checkbox" data-chk="cont" data-v="pago" ${f.cont==="pago"?"checked":""}> PAGÓ LIQUIDACIÓN CONTADOR</label>
-                <label class="chk no"><input type="checkbox" data-chk="cont" data-v="nopago" ${f.cont==="nopago"?"checked":""}> NO PAGÓ LIQUIDACIÓN CONTADOR</label>
+                <label class="chk ok"><input type="checkbox" data-chk="cont" data-v="pago" ${f.cont==="pago"?"checked":""}> ABONÓ LIQUIDACIÓN CONTADOR</label>
+                <label class="chk no"><input type="checkbox" data-chk="cont" data-v="nopago" ${f.cont==="nopago"?"checked":""}> NO ABONÓ LIQUIDACIÓN CONTADOR</label>
               </td>
               <td class="estado"><textarea data-f="obs" rows="4" class="comentario" placeholder="Escribí un comentario sobre este actor…" style="width:230px;">${esc(f.obs)}</textarea>
                 <div class="rep-btns"><button type="button" class="btn-ver-rep" data-ver-rep="1">VER REPARTO HONORARIOS</button><button type="button" class="btn-rep${f.rep ? " on" : ""}" data-rep-btn="1" aria-pressed="${f.rep ? "true" : "false"}">${f.rep ? "✓ " : ""}HONORARIOS REPARTIDOS</button></div></td>
@@ -2558,7 +2558,7 @@ function conectarArchivo(cont){
       c.mod = ms; guardarArchivo(); renderArchivo();
     });
     const repBtn = tr.querySelector("[data-rep-btn]");
-    if(repBtn) repBtn.addEventListener("click", () => { borrador().rep = !borrador().rep; renderArchivo(); });
+    if(repBtn) repBtn.addEventListener("click", () => { const b = borrador(); b.rep = !b.rep; if(b.rep && b.hon !== "abono") b.hon = "abono"; renderArchivo(); });
     tr.querySelector("[data-ver-rep]").addEventListener("click", () => abrirReparto(c, BORRADORES.get(clave) || c.filas[i], clave));
     tr.querySelectorAll("[data-chk]").forEach(chk => chk.addEventListener("change", () => {
       const f = borrador(), k = chk.dataset.chk;
@@ -2566,6 +2566,19 @@ function conectarArchivo(cont){
       renderArchivo();
     }));
     tr.querySelector("[data-recibo]").addEventListener("click", () => abrirRecibo(c, BORRADORES.get(clave) || c.filas[i], clave));
+    tr.querySelector("[data-copiar-aviso]").addEventListener("click", async e => {
+      const btn = e.currentTarget;
+      const texto = waMessage(BORRADORES.get(clave) || c.filas[i]);
+      let ok = false;
+      try{ await navigator.clipboard.writeText(texto); ok = true; }catch(err){}
+      if(!ok){
+        const ta = document.createElement("textarea"); ta.value = texto; document.body.appendChild(ta);
+        ta.select(); try{ ok = document.execCommand("copy"); }catch(err){} ta.remove();
+      }
+      const previo = btn.textContent;
+      btn.textContent = ok ? "✓ COPIADO" : "NO SE PUDO COPIAR";
+      setTimeout(() => { btn.textContent = previo; }, 2000);
+    });
     tr.querySelector("[data-compartir]").addEventListener("click", () => abrirCompartir(c, BORRADORES.get(clave) || c.filas[i]));
     tr.querySelector("[data-guardarfila]").addEventListener("click", () => {
       if(BORRADORES.has(clave)){
@@ -3325,6 +3338,14 @@ document.addEventListener("click", e => {
   document.head.appendChild(s);
 })();
 
+(function(){
+  const s = document.createElement("style");
+  s.textContent = `
+    .tel-wrap{display:flex;gap:6px;align-items:flex-start}
+    .btn-copiar-aviso{width:104px;white-space:normal;background:#2563eb;color:#fff;border:none;border-radius:8px;padding:7px 8px;font:800 11px "IBM Plex Sans",system-ui,sans-serif;letter-spacing:.03em;cursor:pointer;box-shadow:0 3px 8px rgba(37,99,235,.3);line-height:1.2}
+    .btn-copiar-aviso:hover{background:#1d4ed8}`;
+  document.head.appendChild(s);
+})();
 function notifItems(c){
   const items = [];
   c.filas.forEach((f, i) => {
@@ -3440,7 +3461,7 @@ function contarDeudores(){
   const el = document.getElementById("deuCount"); if(el) el.textContent = s.size ? s.size : "";
 }
 function badgeHon(h){ return h === "nopago" ? '<span class="bdg no">NO PAGÓ HONORARIOS</span>' : '<span class="bdg sm">Honorarios sin marcar</span>'; }
-function badgeCont(c){ return c === "pago" ? '<span class="bdg ok">Contador: PAGÓ</span>' : c === "nopago" ? '<span class="bdg no">Contador: NO PAGÓ</span>' : '<span class="bdg sm">Contador sin marcar</span>'; }
+function badgeCont(c){ return c === "pago" ? '<span class="bdg ok">Contador: ABONÓ</span>' : c === "nopago" ? '<span class="bdg no">Contador: NO ABONÓ</span>' : '<span class="bdg sm">Contador sin marcar</span>'; }
 
 function renderDeudores(){
   const cont = document.getElementById("tabDeudores");
@@ -3555,7 +3576,7 @@ function pdfDeudores(lista){
   lista.forEach((g, n) => g.items.forEach(({c, f}, j) => body.push([
     j === 0 ? String(n + 1) : "", j === 0 ? nombreLindo(g.nombre) : "", j === 0 ? ((g.doctype ? g.doctype + " " : "") + (g.docnum || "")).trim() : "",
     c.complementaria || "", f.fechaPago || c.fechaPago || "", fmtMoney(f.bruto || 0), fmtMoney((f.bruto || 0) * 0.15), fmtMoney((f.bruto || 0) * 0.20),
-    (f.hon === "nopago" ? "NO PAGÓ" : "Sin marcar") + (f.cont ? "\nContador: " + (f.cont === "pago" ? "PAGÓ" : "NO PAGÓ") : ""), f.obs || ""
+    (f.hon === "nopago" ? "NO ABONÓ" : "Sin marcar") + (f.cont ? "\nContador: " + (f.cont === "pago" ? "ABONÓ" : "NO ABONÓ") : ""), f.obs || ""
   ])));
   doc.autoTable({
     startY: 44, head: [["#", "Cliente", "DNI", "Complementaria", "Fecha pago", "Bruto", "15%", "20%", "Estado", "Comentario"]], body,
