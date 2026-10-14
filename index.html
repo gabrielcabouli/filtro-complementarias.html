@@ -2362,7 +2362,7 @@ function _renderArchivo(cont){
                 <label class="chk tipo particular"><input type="checkbox" data-chk="tipo" data-v="particular" ${f.tipo==="particular"?"checked":""}> CLIENTE PARTICULAR</label></td>
               <td class="col-tel"><textarea data-f="telefono" rows="${Math.max(1, phoneLines(f.telefono).length)}" style="width:125px;" placeholder="Escribí o pegá teléfonos (uno por renglón)">${esc(phoneLines(f.telefono).join("\n"))}</textarea>
                   <div>${waButtonsHtml(f, true)}</div></td>
-              <td><textarea data-f="caratula" rows="3" style="width:190px;">${esc((f.caratula||"").split("||").map(x=>x.trim()).join("\n"))}</textarea></td>
+              <td><textarea data-f="caratula" rows="3" style="width:190px;">${esc((f.caratula||"").split("||").map(x=>x.trim()).join("\n"))}</textarea>${pjnBotones(f)}</td>
               <td><input data-f="beneficio" value="${esc(f.beneficio)}" style="width:85px;"></td>
               <td class="num"><input data-f="bruto" value="${(f.bruto||0).toFixed(2)}" style="width:88px;text-align:right;"></td>
               <td class="num"><input data-f="desc" value="${(f.desc||0).toFixed(2)}" style="width:88px;text-align:right;"></td>
@@ -3283,6 +3283,45 @@ function abrirReparto(c, f, clave){
     .rep-cerrar{background:#1e3a5f;color:#fff;border:none;border-radius:10px;padding:10px 22px;font:800 13px "IBM Plex Sans",system-ui,sans-serif;letter-spacing:.06em;cursor:pointer;box-shadow:0 4px 12px rgba(30,58,95,.3)}
     .rep-cerrar:hover{background:#2563eb}
     @media (max-width:480px){ .rep-cards{grid-template-columns:1fr} .rep-head h3{font-size:19px} }`;
+  document.head.appendChild(s);
+})();
+
+// =====================================================================
+// ABRIR EXPEDIENTE EN EL PJN (botones bajo la carátula)
+// El número y el año salen de la carátula (2140 / 380). En la extensión, el pedido lo
+// toma pjn.js dentro del Sistema de Consultas Web y abre el expediente solo.
+// =====================================================================
+function pjnBotones(f){
+  const items = (f.caratula || "").split("||").map(x => x.trim()).filter(Boolean).map(t => {
+    const k = leerCaratula(t);
+    const m = /^(\d+)\/(\d{2}|\d{4})$/.exec(k.expte || "");
+    return m ? {numero: m[1], anio: m[2].length === 2 ? "20" + m[2] : m[2], dec: (k.decreto || "").replace(/^decreto\s*/i, "")} : null;
+  }).filter(Boolean);
+  if(!items.length) return "";
+  return `<div class="pjn-row"><span class="pjn-hint">Tocar para abrir expediente</span>${items.map(x => `<button type="button" class="btn-pjn" data-pjn-numero="${esc(x.numero)}" data-pjn-anio="${esc(x.anio)}" title="Abrir el expediente en el PJN">${x.dec ? "DTO. " + esc(x.dec) + " " : ""}Expt. n° ${esc(x.numero)}/${esc(x.anio)}</button>`).join("")}</div>`;
+}
+function abrirExpedientePJN(numero, anio){
+  if(!(typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id)){
+    alert("Para abrir el expediente automáticamente hay que usar el programa desde la extensión de Chrome.");
+    return;
+  }
+  chrome.runtime.sendMessage({tipo: "abrir-expediente-pjn", numero, anio}, resp => {
+    if(chrome.runtime.lastError || !resp || !resp.ok){
+      alert("No se pudo abrir el expediente: " + ((resp && resp.error) || (chrome.runtime.lastError && chrome.runtime.lastError.message) || "error desconocido"));
+    }
+  });
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest && e.target.closest("[data-pjn-numero]");
+  if(b) abrirExpedientePJN(b.dataset.pjnNumero, b.dataset.pjnAnio);
+});
+(function(){
+  const s = document.createElement("style");
+  s.textContent = `
+    .pjn-row{display:flex;flex-direction:column;gap:6px;margin-top:6px;width:max-content;max-width:100%}
+    .pjn-hint{font:700 10px "IBM Plex Sans",system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#2563eb}
+    .btn-pjn{font:700 11px "IBM Plex Sans",system-ui,sans-serif;text-align:left;padding:6px 10px;border-radius:8px;cursor:pointer;background:linear-gradient(135deg,#eef3fa,#dbe7fd);color:#1e3a5f;border:1px solid #93c5fd;white-space:nowrap}
+    .btn-pjn:hover{background:linear-gradient(135deg,#dbe7fd,#bfdbfe);border-color:#2563eb}`;
   document.head.appendChild(s);
 })();
 
