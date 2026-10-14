@@ -1023,8 +1023,8 @@ const LINE_RE = new RegExp(
   MONEY + "(?:\\s+(?:-|" + MONEY + "))*)(?:\\s+(NB|DPP))?\\s*$"
 );
 let ORDEN_COLUMNAS = null;   // orden de BRUTO / DESCUENTOS / NETO segun el encabezado del listado
-function leerImportes(txt){
-  const v = (txt.match(new RegExp(MONEY, "g")) || []).map(parseAmount);
+function leerImportes(txt){ return elegirImportes((txt.match(new RegExp(MONEY, "g")) || []).map(parseAmount)); }
+function elegirImportes(v){
   const ok = (b, d, n) => Math.abs(b - d - n) < 0.02;
   // si el encabezado trae otro orden (ej. BRUTO NETO DESCUENTOS) se respeta
   if(ORDEN_COLUMNAS && v.length >= 3 && ORDEN_COLUMNAS.join() !== "bruto,desc,neto"){
@@ -1076,6 +1076,55 @@ async function extractLinesFromPage(page){
 }
 
 const COMPLEMENTARIA_RE = /COMPLEMENTARIA\s+([\d]{2}\/[\d]{2}\/[\d]{2}[A-Z][\d])/i;
+// Variantes: "COMPLEMENTARIA N° 01/10/26J1", "COMPLEMENTARIA: 01/10/2026 J1", "COMPLEMENTARIA 1/10/26-Y1"
+const COMPLEMENTARIA_FLEX_RE = /COMPLEMENTARIA[^0-9]{0,12}(\d{1,2})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{2,4})\s*[-\s]?\s*([A-Z]\s*\d)?/i;
+function leerComplementaria(line){
+  const a = COMPLEMENTARIA_RE.exec(line); if(a) return a[1].toUpperCase();
+  const m = COMPLEMENTARIA_FLEX_RE.exec(line); if(!m) return "";
+  return m[1].padStart(2,"0") + "/" + m[2].padStart(2,"0") + "/" + m[3].slice(-2) + (m[4] ? m[4].replace(/\s+/g, "").toUpperCase() : "");
+}
+
+// ---------------------------------------------------------------
+// Lector "flexible" de renglones: se usa cuando el renglon no tiene el formato clasico.
+// Acepta: D.N.I. / DNI: / L.E. / PAS, documento con puntos (8.247.282), beneficio con espacios
+// ("23 - 038721 /"), columnas extra (R.G. 3770, DET.PAGO, CBU), importes 1,234.56 o 1.234,56
+// o sin separador de miles, y "-" o vacio en descuentos.
+// ---------------------------------------------------------------
+const DOC_FLEX_RE = /^(L\.?\s?E|D\.?\s?U|D\.?\s?N\.?\s?I|L\.?\s?C|C\.?\s?I|PAS(?:APORTE)?|CUIL|CUIT)\.?\s*:?\s*(\d{1,3}(?:[.\s]?\d{3}){1,3}|\d{5,11})\b\s*(.*)$/i;
+const BENEF_FLEX_RE = /(?:^|\s)(\d{1,3})\s*-\s*(\d{3,8})\s*\/\s*(\d{0,3})(?=\s|$)/;
+const IMPORTE_FLEX_RE = /^-?(?:\d{1,3}(?:[.,]\d{3})+|\d+)[.,]\d{2}$/;
+function importeFlexible(t){
+  t = t.replace(/^\$/, "");
+  const coma = t.lastIndexOf(","), punto = t.lastIndexOf(".");
+  if(coma > punto) t = t.replace(/\./g, "").replace(",", ".");   // 1.234.567,89
+  else t = t.replace(/,/g, "");                                    // 1,234,567.89
+  return parseFloat(t);
+}
+function esInicioDeRenglon(line){ return DOC_FLEX_RE.test((line || "").trim()); }
+function parseRenglonFlexible(line){
+  const d = DOC_FLEX_RE.exec((line || "").replace(/\s+/g, " ").trim());
+  if(!d) return null;
+  let tipo = d[1].toUpperCase().replace(/[.\s]/g, "");
+  if(tipo === "PASAPORTE") tipo = "PAS";
+  const docnum = d[2].replace(/[.\s]/g, "").replace(/^0+/, "");
+  const resto = d[3];
+  const b = BENEF_FLEX_RE.exec(resto);
+  if(!b) return null;
+  const beneficio = b[1].padStart(2, "0") + "-" + b[2] + "/" + (b[3] || "");
+  // nombre: lo que esta entre el documento y el beneficio (sin numeros sueltos de columnas extra)
+  const name = resto.slice(0, b.index).replace(/\b\d+\b/g, " ").replace(/\s+/g, " ").replace(/^[\s:-]+|[\s:-]+$/g, "").trim();
+  if(!/[A-ZÁÉÍÓÚÑ]{2}/i.test(name)) return null;
+  const despues = resto.slice(b.index + b[0].length).trim().split(/\s+/).filter(Boolean);
+  let expte = "", importes = [];
+  for(const t of despues){
+    const limpio = t.replace(/^\$/, "");
+    if(IMPORTE_FLEX_RE.test(limpio)) importes.push(importeFlexible(limpio));
+    else if(t === "-" && importes.length) importes.push(0);
+    else if(!importes.length && !expte && /^\d{3,9}$/.test(t)) expte = t;
+  }
+  if(!importes.length) return null;
+  return {doctype: tipo, docnum, name, beneficio, expte, ...elegirImportes(importes)};
+}
 const FECHA_PAGO_RE = /^(\d{2}\/\d{2}\/\d{4})\s+Hoja:/;          // fecha del encabezado (solo respaldo)
 // "Fecha de Pago: 07/10/2026" (al final del listado). Tolera espacios sueltos, ":" separado,
 // fechas con "-" o "." y dia/mes de un digito, y que la fecha quede en el renglon siguiente.
@@ -1117,14 +1166,16 @@ async function extractRecords(file){
   let fileFecha = "";
   let fileFechaPago = "";
   const textoArchivo = [];
+  let leidos = 0;     // renglones de pago reconocidos (antes de filtrar por beneficio)
   let lastRec = null; // ultimo registro leido, para asignarle su "Expte.Juicio Caja" (viene en la linea siguiente)
   for(let p = 1; p <= pdf.numPages; p++){
     const page = await pdf.getPage(p);
     const lines = await extractLinesFromPage(page);
-    for(const line of lines){
+    for(let li = 0; li < lines.length; li++){
+      const line = lines[li];
       if(!fileComplementaria){
-        const cm = COMPLEMENTARIA_RE.exec(line);
-        if(cm) fileComplementaria = cm[1].toUpperCase();
+        const cm = leerComplementaria(line);
+        if(cm) fileComplementaria = cm;
       }
       if(!fileFecha){
         const fm = FECHA_PAGO_RE.exec(line);
@@ -1140,19 +1191,25 @@ async function extractRecords(file){
       if(jm){ if(lastRec && !lastRec.juicio) lastRec.juicio = jm[1]; continue; }
       if(line.startsWith("CBU")) continue;
       const m = LINE_RE.exec(line);
-      if(!m) continue;
+      let reg = null;
+      if(m){
+        reg = {doctype: m[1], docnum: m[2], name: m[3].replace(/\s+/g," ").trim(),
+               beneficio: m[5].replace(/\s+/g, ""), expte: m[6], ...leerImportes(m[7])};
+      } else if(esInicioDeRenglon(line)){
+        // formato distinto: lector flexible; si el renglon quedo partido en dos, se une con el siguiente
+        reg = parseRenglonFlexible(line);
+        if(!reg && li + 1 < lines.length && !esInicioDeRenglon(lines[li + 1])){
+          reg = parseRenglonFlexible(line + " " + lines[li + 1]);
+          if(reg) li++;
+        }
+      }
+      if(!reg) continue;
+      leidos++;
       lastRec = null;
-      m[5] = m[5].replace(/\s+/g, "");
-      const beneficioPrefix = parseInt(m[5].split("-")[0], 10);
+      const beneficioPrefix = parseInt(reg.beneficio.split("-")[0], 10);
       if(!BENEFICIO_PREFIJOS_VALIDOS.has(beneficioPrefix)) continue; // solo estos prefijos son clientes
-      const name = m[3].replace(/\s+/g," ").trim();
       lastRec = {juicio: ""};
-      records.push({
-        doctype: m[1], docnum: m[2], name: name,
-        beneficio: m[5], expte: m[6],
-        ...leerImportes(m[7]),
-        origen: file.name
-      });
+      records.push(Object.assign(reg, {origen: file.name}));
       Object.assign(records[records.length-1], lastRec);
       lastRec = records[records.length-1];
     }
@@ -1167,6 +1224,8 @@ async function extractRecords(file){
   file._fechaInfo = fileFechaPago
     ? `Fecha de pago: ${fileFechaPago} (tomada de "Fecha de Pago")`
     : `⚠️ No se encontró "Fecha de Pago" en el PDF — se usó la fecha del encabezado (${fileFecha || "sin fecha"}). Revisala.`;
+  file._leidos = leidos;
+  file._sinTexto = textoArchivo.join("").replace(/\s/g, "").length < 50;
   records.forEach(r => { r.complementaria = fileComplementaria; r.fechaPago = fileFechaPago || fileFecha; r.fechaFuente = fileFechaPago ? "pago" : "encabezado"; });
   return records;
 }
@@ -1508,6 +1567,8 @@ document.getElementById("btnProcess").addEventListener("click", async () => {
       try{
         const recs = await extractRecords(file);
         log(`  ${recs.length} registros detectados` + (recs.length && recs[0].complementaria ? ` — Complementaria ${recs[0].complementaria}` : ""));
+        if(file._sinTexto) log("  ⚠️ Este PDF no tiene texto (parece escaneado o una foto): no se puede leer. Pedí el listado original en PDF.");
+        else log(`  ${file._leidos} renglones de pago leídos en total; ${recs.length} con beneficio de clientes (los demás prefijos se omiten).`);
         if(file._fechaInfo) log("  " + file._fechaInfo);
         allRecords = allRecords.concat(recs);
       } catch(e){
