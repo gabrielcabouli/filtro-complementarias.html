@@ -2378,7 +2378,7 @@ function _renderArchivo(cont){
                 <label class="chk no"><input type="checkbox" data-chk="cont" data-v="nopago" ${f.cont==="nopago"?"checked":""}> NO PAGÓ LIQUIDACIÓN CONTADOR</label>
               </td>
               <td class="estado"><textarea data-f="obs" rows="4" class="comentario" placeholder="Escribí un comentario sobre este actor…" style="width:230px;">${esc(f.obs)}</textarea>
-                <label class="chk rep"><input type="checkbox" data-rep="1" ${f.rep ? "checked" : ""}> REPARTIDO</label></td>
+                <div class="rep-btns"><button type="button" class="btn-ver-rep" data-ver-rep="1">VER REPARTO</button><button type="button" class="btn-rep${f.rep ? " on" : ""}" data-rep-btn="1" aria-pressed="${f.rep ? "true" : "false"}">${f.rep ? "✓ " : ""}REPARTIDO</button></div></td>
               <td class="estado acciones-fila">
                 <button class="btn-guardar-fila${borrador ? " pendiente" : ""}" data-guardarfila="1">${borrador ? "💾 GUARDAR" : (ultimaFilaGuardada === c.id + "|" + i ? "✓ Guardado" : "💾 Guardar")}</button>
                 <button class="danger" data-delfila="1">Quitar</button>
@@ -2557,14 +2557,15 @@ function conectarArchivo(cont){
       if(BORRADORES.has(clave)) Object.assign(BORRADORES.get(clave), { dudoso: false, verificado: "manual" });
       c.mod = ms; guardarArchivo(); renderArchivo();
     });
-    const rep = tr.querySelector("[data-rep]");
-    if(rep) rep.addEventListener("change", () => { borrador().rep = rep.checked; renderArchivo(); });
+    const repBtn = tr.querySelector("[data-rep-btn]");
+    if(repBtn) repBtn.addEventListener("click", () => { borrador().rep = !borrador().rep; renderArchivo(); });
+    tr.querySelector("[data-ver-rep]").addEventListener("click", () => abrirReparto(c, BORRADORES.get(clave) || c.filas[i], clave));
     tr.querySelectorAll("[data-chk]").forEach(chk => chk.addEventListener("change", () => {
       const f = borrador(), k = chk.dataset.chk;
       f[k] = chk.checked ? chk.dataset.v : "";   // las dos opciones de cada grupo se excluyen entre si
       renderArchivo();
     }));
-    tr.querySelector("[data-recibo]").addEventListener("click", () => abrirRecibo(c, BORRADORES.get(clave) || c.filas[i]));
+    tr.querySelector("[data-recibo]").addEventListener("click", () => abrirRecibo(c, BORRADORES.get(clave) || c.filas[i], clave));
     tr.querySelector("[data-compartir]").addEventListener("click", () => abrirCompartir(c, BORRADORES.get(clave) || c.filas[i]));
     tr.querySelector("[data-guardarfila]").addEventListener("click", () => {
       if(BORRADORES.has(clave)){
@@ -3043,7 +3044,7 @@ function generarRecibo(d){
 const GASTOS_CONTABLE = 150000;
 const DECRETOS_RECIBO = ["DECRETO 380/17", "DECRETO 2140/13", "DECRETO 2744/93"];
 function claveDecreto(t){ const m = /(2140|380|2744)/.exec(t || ""); return m ? m[1] : ""; }
-function abrirRecibo(c, f){
+function abrirRecibo(c, f, clave){
   const cars = (f.caratula || "").split("||").map(x => x.trim()).filter(Boolean).map(leerCaratula);
   const car0 = cars.find(k => claveDecreto(k.decreto)) || cars[0] || {};
   const dec0 = DECRETOS_RECIBO.find(x => claveDecreto(x) === claveDecreto(car0.decreto)) || "DECRETO 2140/13";
@@ -3052,8 +3053,9 @@ function abrirRecibo(c, f){
   const d = {
     nombre: nombreLindo(f.name).replace(/,\s*/, " "), dni: (f.docnum || "").trim(), fecha: fechaHoyTexto(),
     decreto: dec0, juicio: c0.juicio || "", expte: c0.expte || "", gastos: false,
-    importe: fmtMoney((f.bruto || 0) * 0.20).replace(/^\$\s*/, ""), concepto: "honorarios profesionales", adicional: ""
+    importe: (f.honRecibo != null ? fmtMoney(f.honRecibo) : fmtMoney((f.bruto || 0) * 0.20)).replace(/^\$\s*/, ""), concepto: "honorarios profesionales", adicional: ""
   };
+  const impInicial = d.importe;
   const tel = telefonosUnicos(f.telefono).find(x => x.a.link && !x.a.dudoso) || telefonosUnicos(f.telefono).find(x => x.a.link);
   const m = document.createElement("div"); m.className = "modal-fondo";
   m.innerHTML = `<div class="modal recibo-modal">
@@ -3094,6 +3096,7 @@ function abrirRecibo(c, f){
   </div>`;
   let t = null;
   const refrescar = async () => {
+    if(clave && d.importe !== impInicial) guardarHonRecibo(c, clave, leerImporte(d.importe));
     const tot = leerImporte(d.importe) + (d.gastos ? GASTOS_CONTABLE : 0);
     m.querySelector("#recTotal").innerHTML = d.gastos
       ? `Honorarios ${fmtMoney(leerImporte(d.importe))} + gastos estudio contable ${fmtMoney(GASTOS_CONTABLE)} = <b>TOTAL ${fmtMoney(tot)}</b>`
@@ -3155,6 +3158,107 @@ function abrirRecibo(c, f){
 // WhatsApp no permite que una pagina mande mensajes sola: se abre cada chat con el
 // mensaje ya escrito y se toca "Enviar". El programa recuerda a quien ya se le mando.
 // =====================================================================
+// =====================================================================
+// REPARTO DE HONORARIOS (ventana VER REPARTO)
+// Honorarios = importe del recibo de pago (honRecibo). Si el cliente es MUTUAL, primero se
+// descuenta el 9%. Luego se reparte el neto segun el juzgado:
+//   Rubén 40% siempre · Diana y Gabriel 40% (60% en juzgados 5, 8 y 9, donde Gabriel tiene 20%)
+//   20% restante: Guillermo (juzgados 1, 2, 6) · Roberta y Damián (juzgados 3, 4, 7, 10)
+// =====================================================================
+const REP_RESPONSABLE = {1: "Guillermo", 2: "Guillermo", 6: "Guillermo", 3: "Roberta y Damián", 4: "Roberta y Damián", 7: "Roberta y Damián", 10: "Roberta y Damián"};
+const REP_GABRIEL = [5, 8, 9];
+function juzgadoRep(f){
+  if(f.juzgado) return +f.juzgado;
+  for(const t of (f.caratula || "").split("||").map(x => x.trim()).filter(Boolean)){
+    const m = /(\d+)\s*$/.exec(leerCaratula(t).juzgado || "");
+    if(m) return +m[1];
+  }
+  return null;
+}
+function honRepFor(f){ return f.honRecibo != null ? f.honRecibo : Math.round((f.bruto || 0) * 0.20); }
+function calcRep(f){
+  const hon = honRepFor(f), mutual = f.tipo === "mutual";
+  const desc = mutual ? Math.round(hon * 0.09) : 0, neto = hon - desc, j = juzgadoRep(f);
+  if(!(j >= 1 && j <= 10)) return {hon, mutual, desc, neto, j, filas: null};
+  const filas = [{nombre: "Rubén", pct: 40}, {nombre: "Diana y Gabriel", pct: REP_GABRIEL.includes(j) ? 60 : 40}];
+  if(REP_RESPONSABLE[j]) filas.push({nombre: REP_RESPONSABLE[j], pct: 20});
+  let suma = 0;
+  filas.forEach((x, k) => { x.monto = k < filas.length - 1 ? Math.round(neto * x.pct / 100) : 0; suma += x.monto; });
+  filas[filas.length - 1].monto = neto - suma;   // el redondeo queda en la ultima fila
+  return {hon, mutual, desc, neto, j, filas};
+}
+function guardarHonRecibo(c, clave, valor){
+  if(!BORRADORES.has(clave)) BORRADORES.set(clave, JSON.parse(JSON.stringify(c.filas[+clave.split("|")[1]])));
+  BORRADORES.get(clave).honRecibo = Math.round(valor);
+  renderArchivo();
+}
+function abrirReparto(c, f, clave){
+  const idx = +clave.split("|")[1];
+  const r = calcRep(f);
+  const m = document.createElement("div"); m.className = "modal-fondo";
+  const cerrar = () => { m.remove(); renderArchivo(); };
+  const filasHtml = r.filas ? r.filas.map(x => `<tr><td>${esc(x.nombre)}</td><td class="num">${x.pct}%</td><td class="num">${fmtMoney(x.monto)}</td></tr>`).join("")
+    + `<tr class="rep-total"><td>Total repartido</td><td class="num">100%</td><td class="num">${fmtMoney(r.neto)}</td></tr>` : "";
+  m.innerHTML = `<div class="modal rep-modal">
+    <h3>Reparto de honorarios</h3>
+    <p class="rep-sub">${esc(nombreLindo(f.name))}</p>
+    ${r.mutual ? `<div class="rep-mutual">
+      <div class="rep-mutual-h"><span>Cliente mutual</span><b>9%</b></div>
+      <div class="rep-mutual-row"><span>Honorarios cobrados</span><span>${fmtMoney(r.hon)}</span></div>
+      <div class="rep-mutual-desc"><span>Se descuenta 9% Mutual<span class="rep-deliver">(ENTREGAR A LA MUTUAL)</span></span><b>− ${fmtMoney(r.desc)}</b></div>
+    </div>` : ""}
+    <div class="rep-cards">
+      <div class="rep-card"><div class="lbl">Honorarios cobrados</div><div class="val">${fmtMoney(r.hon)}</div><div class="tag">${f.honRecibo != null ? "Según recibo de pago" : "Sin recibo: 20% del bruto"}</div></div>
+      <div class="rep-card neto"><div class="lbl">Neto a repartir</div><div class="val">${fmtMoney(r.neto)}</div></div>
+    </div>
+    <label class="rep-jz">Juzgado
+      <select data-jz>${["", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => `<option value="${n}" ${r.j === n ? "selected" : ""}>${n || "—"}</option>`).join("")}</select>
+    </label>
+    ${r.filas ? `<table class="rep-tab"><thead><tr><th>Integrante</th><th class="num">%</th><th class="num">Monto</th></tr></thead><tbody>${filasHtml}</tbody></table>`
+              : `<div class="recibo-hint no">⚠️ Falta el juzgado: elegilo arriba para ver el reparto.</div>`}
+    <div class="actions" style="justify-content:flex-end;"><button class="secondary" data-a="cerrar">Cerrar</button></div>
+  </div>`;
+  m.querySelector("[data-jz]").addEventListener("change", e => {
+    if(!BORRADORES.has(clave)) BORRADORES.set(clave, JSON.parse(JSON.stringify(c.filas[idx])));
+    BORRADORES.get(clave).juzgado = e.target.value;
+    m.remove(); renderArchivo(); abrirReparto(c, BORRADORES.get(clave), clave);
+  });
+  m.querySelector('[data-a="cerrar"]').addEventListener("click", cerrar);
+  m.addEventListener("click", e => { if(e.target === m) cerrar(); });
+  document.body.appendChild(m);
+}
+(function(){
+  const s = document.createElement("style");
+  s.textContent = `
+    .rep-btns{display:grid;gap:6px;width:190px}
+    .btn-ver-rep,.btn-rep{font:600 12px "IBM Plex Sans",system-ui,sans-serif;letter-spacing:.04em;text-transform:uppercase;width:100%;padding:8px 10px;border-radius:8px;cursor:pointer;background:transparent}
+    .btn-ver-rep{border:1.5px dashed #1e3a5f;color:#1e3a5f}
+    .btn-rep{border:1.5px solid #9aa3b0;color:#5d6878}
+    .btn-rep.on{background:#2563eb;border-color:#2563eb;color:#fff}
+    .rep-modal{max-width:560px}
+    .rep-sub{color:#5d6878;margin:0 0 12px;font-size:13px}
+    .rep-mutual{background:#db2777;color:#fff;border-radius:10px;padding:14px;margin-bottom:12px;box-shadow:0 6px 18px rgba(219,39,119,.25)}
+    .rep-mutual-h{display:flex;justify-content:space-between;align-items:center;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+    .rep-mutual-h b{font:700 26px "IBM Plex Mono",monospace}
+    .rep-mutual-row{display:flex;justify-content:space-between;gap:12px;margin-top:8px;font-size:14px}
+    .rep-mutual-desc{display:flex;justify-content:space-between;align-items:center;gap:12px;background:#fff;color:#db2777;border-radius:8px;padding:12px 14px;margin-top:8px;font-weight:600;font-size:17px;box-shadow:0 0 0 2px #db2777}
+    .rep-mutual-desc b{font:700 22px "IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+    .rep-deliver{display:block;font-size:12px;font-weight:700;letter-spacing:.06em;margin-top:3px}
+    .rep-cards{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+    .rep-card{border:1px solid #d9dee6;border-radius:10px;padding:10px 12px}
+    .rep-card.neto{background:#e4ebf4;border-color:transparent}
+    .rep-card .lbl{font-size:12px;color:#5d6878}
+    .rep-card .val{font:500 18px "IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+    .rep-card .tag{font-size:11px;color:#5d6878}
+    .rep-jz{display:flex;justify-content:space-between;align-items:center;margin:6px 0 10px;font-size:13px;color:#5d6878}
+    .rep-tab{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+    .rep-tab th,.rep-tab td{text-align:left;padding:8px 0;border-bottom:1px solid #d9dee6}
+    .rep-tab .num{text-align:right}
+    .rep-tab .rep-total td{font-weight:700;border-bottom:none;padding-top:10px}
+    .rep-tab .rep-total td:last-child{color:#15803d}`;
+  document.head.appendChild(s);
+})();
+
 function notifItems(c){
   const items = [];
   c.filas.forEach((f, i) => {
