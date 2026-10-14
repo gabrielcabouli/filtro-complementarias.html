@@ -109,6 +109,32 @@
   .notif-ok{color:#15803d; font-weight:800; font-size:12px; text-align:right;} .notif-ok small{display:block; font-weight:400; color:#64748b;}
   .notif-uno{background:#16a34a; color:#fff;}
   .notif-sin{margin-top:10px; font-size:12.5px; color:#64748b;} .notif-sin summary{cursor:pointer; font-weight:700; color:#b45309;}
+  /* pantalla completa de una complementaria */
+  .arch-comp{position:relative;}
+  .btn-expandir{position:absolute; top:8px; right:10px; background:#1e3a5f; color:#fff; border:none; border-radius:8px; padding:6px 11px; font-size:12px; font-weight:800; cursor:pointer; z-index:2;}
+  .btn-expandir:hover{background:#16304f;}
+  .arch-comp .arch-comp-h{padding-right:110px;}
+  .arch-comp.expandida{position:fixed; inset:0; z-index:800; margin:0; border-radius:0; overflow:auto; padding:14px 18px; background:var(--panel);}
+  .arch-comp.expandida .tablewrap{max-height:calc(100vh - 150px);}
+  .arch-comp.expandida .btn-expandir{background:#b91c1c;} .arch-comp.expandida .btn-expandir:hover{background:#991b1b;}
+  body.con-expandida{overflow:hidden;}
+  /* numero grande a la izquierda de los botones */
+  .chk.avisado{width:auto; justify-content:center; font-size:11px; white-space:nowrap; color:#b91c1c; background:#fee2e2; border:2px solid #dc2626; padding:5px 8px; margin:0 0 6px;}
+  .chk.avisado input{accent-color:#dc2626; width:17px; height:17px; margin:0;}
+  .chk.avisado.on{background:#dc2626; color:#fff;} .chk.avisado.on input{accent-color:#fff;}
+  .num-badges{display:flex; gap:4px; justify-content:flex-end; align-items:center; margin-bottom:5px; flex-wrap:wrap;}
+  .num-fila{display:flex; align-items:stretch; gap:6px;}
+  .num-grande{display:flex; align-items:center; justify-content:center; min-width:40px; padding:0 4px; font-size:30px; font-weight:900; color:#1e3a5f; background:#f1f5f9; border:1px solid #cbd5e1; border-radius:8px; line-height:1;}
+  .num-btns{display:flex; flex-direction:column; gap:5px;}
+  .num-btns .btn-compartir, .num-btns .btn-recibo{margin:0;}
+  tr.pagado .num-grande{text-decoration:none; background:#dcfce7; border-color:#86efac; color:#14532d;}
+  .col-num{min-width:170px;}
+  /* tipo de cliente */
+  .chk.tipo{width:150px; margin-top:4px; justify-content:flex-start; text-align:left; white-space:nowrap; font-size:11px;}
+  tr.pagado td.col-num.col-num{opacity:1 !important;}
+  .chk.mutual{color:#6d28d9; background:#ede9fe; border:1px solid #c4b5fd;} .chk.mutual input{accent-color:#7c3aed;}
+  .chk.particular{color:#c2410c; background:#ffedd5; border:1px solid #fdba74;} .chk.particular input{accent-color:#ea580c;}
+  tr.pagado .chk.tipo{text-decoration:none;}
   .verif-btn{background:#fff; color:#dc2626; border:2px solid #dc2626; border-radius:6px; font-size:11px; font-weight:800; padding:3px 7px; cursor:pointer;}
   .verif-btn:hover{background:#dc2626; color:#fff;}
   .tel-edit{background:#fff; border:1px solid #cbd5e1; border-radius:50%; width:28px; height:28px; padding:0; font-size:13px; line-height:26px; cursor:pointer; flex:0 0 auto; margin-left:4px;}
@@ -180,7 +206,6 @@
     .modal{padding:18px;}
     input, textarea, select{font-size:16px !important;}   /* evita que el iPhone haga zoom al escribir */
   }
-  .col-num{min-width:118px;}
   .btn-compartir{display:block; margin:6px 0 0 auto; background:#0f766e; color:#fff; font-size:10px; font-weight:800; padding:6px 8px; border-radius:6px; line-height:1.2; white-space:normal; width:108px; text-align:center;}
   tr.pagado td:first-child .btn-compartir{text-decoration:none;}
   .btn-wa{background:#16a34a;}
@@ -2131,6 +2156,7 @@ document.querySelectorAll(".tabs .tab").forEach(b => b.addEventListener("click",
 
 let archBusqueda = "";
 const archAbiertos = new Set();   // complementarias desplegadas
+let archExpandida = "";            // complementaria abierta a pantalla completa
 const aniosCerrados = new Set();
 
 function totalesComp(c){
@@ -2212,7 +2238,9 @@ function _renderArchivo(cont){
         if(q && !filas.length) return;
         const t = totalesComp(c);
         const abierto = archAbiertos.has(c.id) || !!q;
-        html += `<div class="arch-comp" data-id="${esc(c.id)}">
+        const exp = archExpandida === c.id;
+        html += `<div class="arch-comp${exp ? " expandida" : ""}" data-id="${esc(c.id)}">
+          <button class="btn-expandir" data-expandir="${esc(c.id)}" title="${exp ? "Volver al tamaño normal (Esc)" : "Ver la complementaria a pantalla completa"}">${exp ? "🗗 REDUCIR" : "⛶ EXPANDIR"}</button>
           <div class="arch-comp-h">
             <button class="ver-btn${abierto ? " abierto" : ""}" data-toggle="${esc(c.id)}">${abierto ? "▾ OCULTAR COMPLEMENTARIA" : "▸ VER COMPLEMENTARIA"}</button>
             <button class="btn-notif" data-notif="${esc(c.id)}" title="Manda el aviso por WhatsApp, uno por uno, a todos los celulares verificados (en verde)">📲 NOTIFICAR CLIENTES POR WHATSAPP${(() => { const n = notifResumen(c); return n.total ? ` <span class="notif-cnt">${n.enviados}/${n.total}</span>` : ""; })()}</button>
@@ -2237,11 +2265,16 @@ function _renderArchivo(cont){
             const f = borrador || fGuardada;
             const pag = (f.hon === "abono" ? " pagado" : "") + (f.rep ? " repartido" : "");
             html += `<tr class="arch-fila${pag}${borrador ? " sin-guardar" : ""}" data-id="${esc(c.id)}" data-i="${i}">
-              <td class="num col-num">${f.nuevo ? '<span class="bdg-nuevo">NUEVO</span> ' : ''}${f.dudoso ? '<button class="verif-btn" data-esclient="1" title="Tocá si ya verificaste que es tu cliente: se quita el VERIFICAR">VERIFICAR ✓</button> ' : ''}${filas.findIndex(x => x.i === i) + 1}
-                <button class="btn-compartir" data-compartir="1" title="Genera un PDF con la liquidación para mandarle al cliente">TOCAR PARA COMPARTIR AL CLIENTE</button>
-                <button class="btn-recibo" data-recibo="1" title="Arma un recibo de pago firmado para mandarle al cliente">GENERAR RECIBO DE PAGO</button></td>
+              <td class="num col-num">
+                <label class="chk avisado${f.avisado === "si" ? " on" : ""}"><input type="checkbox" data-chk="avisado" data-v="si" ${f.avisado === "si" ? "checked" : ""}> ${f.avisado === "si" ? "CLIENTE AVISADO" : "CLIENTE SIN AVISAR"}</label>
+                ${(f.nuevo || f.dudoso) ? `<div class="num-badges">${f.nuevo ? '<span class="bdg-nuevo">NUEVO</span>' : ''}${f.dudoso ? '<button class="verif-btn" data-esclient="1" title="Tocá si ya verificaste que es tu cliente: se quita el VERIFICAR">VERIFICAR ✓</button>' : ''}</div>` : ""}
+                <div class="num-fila"><div class="num-grande">${filas.findIndex(x => x.i === i) + 1}</div>
+                <div class="num-btns"><button class="btn-compartir" data-compartir="1" title="Genera un PDF con la liquidación para mandarle al cliente">TOCAR PARA COMPARTIR AL CLIENTE</button>
+                <button class="btn-recibo" data-recibo="1" title="Arma un recibo de pago firmado para mandarle al cliente">GENERAR RECIBO DE PAGO</button></div></div></td>
               <td><input data-f="docnum" value="${esc(f.docnum)}" style="width:85px;"></td>
-              <td><textarea data-f="name" rows="2" style="width:150px;">${esc(f.name)}</textarea></td>
+              <td><textarea data-f="name" rows="2" style="width:150px;">${esc(f.name)}</textarea>
+                <label class="chk tipo mutual"><input type="checkbox" data-chk="tipo" data-v="mutual" ${f.tipo==="mutual"?"checked":""}> CLIENTE MUTUAL</label>
+                <label class="chk tipo particular"><input type="checkbox" data-chk="tipo" data-v="particular" ${f.tipo==="particular"?"checked":""}> CLIENTE PARTICULAR</label></td>
               <td class="col-tel"><textarea data-f="telefono" rows="${Math.max(1, phoneLines(f.telefono).length)}" style="width:125px;" placeholder="Escribí o pegá teléfonos (uno por renglón)">${esc(phoneLines(f.telefono).join("\n"))}</textarea>
                   <div>${waButtonsHtml(f, true)}</div></td>
               <td><textarea data-f="caratula" rows="3" style="width:190px;">${esc((f.caratula||"").split("||").map(x=>x.trim()).join("\n"))}</textarea></td>
@@ -2323,6 +2356,11 @@ async function agregarNuevosDesdePDF(id, file, btn){
   finally{ if(btn && document.body.contains(btn)){ btn.disabled = false; btn.textContent = txt; } }
 }
 
+document.addEventListener("keydown", e => {
+  if(e.key === "Escape" && archExpandida && !document.querySelector(".modal-fondo")){
+    archExpandida = ""; document.body.classList.remove("con-expandida"); renderArchivo();
+  }
+});
 function conectarArchivo(cont){
   const b = cont.querySelector("#archBuscar");
   b.addEventListener("input", e => { archBusqueda = e.target.value; const pos = e.target.selectionStart; renderArchivo();
@@ -2336,6 +2374,13 @@ function conectarArchivo(cont){
 
   cont.querySelectorAll(".arch-anio-h").forEach(h => h.addEventListener("click", () => {
     const a = h.dataset.anio; aniosCerrados.has(a) ? aniosCerrados.delete(a) : aniosCerrados.add(a); renderArchivo(); }));
+  cont.querySelectorAll("[data-expandir]").forEach(b => b.addEventListener("click", () => {
+    const id = b.dataset.expandir;
+    archExpandida = archExpandida === id ? "" : id;
+    if(archExpandida) archAbiertos.add(id);
+    document.body.classList.toggle("con-expandida", !!archExpandida);
+    renderArchivo();
+  }));
   cont.querySelectorAll("[data-toggle]").forEach(h => h.addEventListener("click", () => {
     const id = h.dataset.toggle; archAbiertos.has(id) ? archAbiertos.delete(id) : archAbiertos.add(id); renderArchivo(); }));
   cont.querySelectorAll("[data-fecha]").forEach(inp => inp.addEventListener("change", () => {
@@ -3044,7 +3089,8 @@ function marcarNotificado(c, i, num, valor){
   const ms = ahoraMs();
   const notif = Object.assign({}, c.filas[i].notif || {});
   if(valor) notif[num] = ms; else delete notif[num];
-  c.filas[i] = Object.assign({}, c.filas[i], {notif, mod: ms}); c.mod = ms;
+  c.filas[i] = Object.assign({}, c.filas[i], {notif, mod: ms}, valor ? {avisado: "si"} : {}); c.mod = ms;
+  if(valor && BORRADORES.has(c.id + "|" + i)) BORRADORES.get(c.id + "|" + i).avisado = "si";   // al mandarle el aviso queda tildado CLIENTE AVISADO
   guardarArchivo();
 }
 function abrirNotificar(id){
