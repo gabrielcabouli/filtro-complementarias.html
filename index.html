@@ -1843,6 +1843,7 @@ document.getElementById("btnPDF").addEventListener("click", () => {
 });
 
 (function(){ const s = document.createElement("style"); s.textContent = `.pct-sel{display:inline-flex;gap:6px;align-items:center;cursor:pointer;white-space:nowrap;padding:6px 10px;border-radius:9px;border:1.5px solid transparent}.pct-sel.on{background:#bfdbfe;border-color:#60a5fa;font-weight:700;color:#1e3a5f}`; document.head.appendChild(s); })();
+(function(){ const s = document.createElement("style"); s.textContent = `.fa-wrap{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap}.fa-on{background:#2563eb !important;color:#fff !important;border-color:#2563eb !important}.fa-chip{font:800 10px "Segoe UI",system-ui,sans-serif;padding:3px 8px;border-radius:999px;border:1.5px solid #cbd5e1;background:#fff;color:#334155;cursor:pointer;white-space:nowrap;letter-spacing:.02em}.fa-chip b{margin-left:5px;background:#e2e8f0;color:#334155;padding:0 5px;border-radius:999px}.fa-chip.si{border-color:#16a34a;color:#15803d}.fa-chip.si.on{background:#16a34a;color:#fff}.fa-chip.si.on b{background:#fff;color:#15803d}.fa-chip.no{border-color:#dc2626;color:#b91c1c}.fa-chip.no.on{background:#dc2626;color:#fff}.fa-chip.no.on b{background:#fff;color:#b91c1c}.arch-grupo td{font:800 11px "Segoe UI",system-ui,sans-serif;letter-spacing:.05em;padding:6px 10px;text-transform:uppercase}.arch-grupo.abonaron td{background:#dcfce7;color:#14532d}.arch-grupo.no td{background:#fee2e2;color:#7f1d1d}`; document.head.appendChild(s); })();
 // Genera el PDF de una lista de filas. opciones.estado = true agrega el estado de pago
 // (filas con honorarios abonados tachadas); opciones.nombre = nombre del archivo.
 function generarPDF(lista, opciones){
@@ -2316,10 +2317,17 @@ function _renderArchivo(cont){
     if(!cerrado){
       lista.forEach(c => {
         const claveOrden = f => stripAccents(f.name || "").toUpperCase().replace(/[^A-Z ,]/g, "").trim();
-        const filas = c.filas.map((f,i) => ({f,i})).sort((a,b) => claveOrden(a.f).localeCompare(claveOrden(b.f), "es")).filter(({f}) => !f.borrado).filter(({f}) => !q ||
+        let filas = c.filas.map((f,i) => ({f,i})).sort((a,b) => claveOrden(a.f).localeCompare(claveOrden(b.f), "es")).filter(({f}) => !f.borrado).filter(({f}) => !q ||
           stripAccents(f.name||"").toUpperCase().includes(q) || (f.docnum||"").includes(q));
         if(q && !filas.length) return;
         const t = totalesComp(c);
+        const fa = archFiltro[c.id] || "todos";
+        const esAb = ({f, i}) => ((BORRADORES.get(c.id + "|" + i) || f).hon === "abono");
+        const nAb = filas.filter(esAb).length, nNo = filas.length - nAb;
+        if(fa !== "todos"){
+          const ab = filas.filter(esAb), no = filas.filter(x => !esAb(x));
+          filas = fa === "abonaron" ? [...ab, ...no] : [...no, ...ab];
+        }
         const abierto = archAbiertos.has(c.id) || !!q;
         const exp = archExpandida === c.id;
         html += `<div class="arch-comp${exp ? " expandida" : ""}" data-id="${esc(c.id)}">
@@ -2330,8 +2338,12 @@ function _renderArchivo(cont){
             <b class="arch-titulo">Complementaria ${esc(c.complementaria || "sin número")}</b>
             <span>Fecha de pago: <input class="arch-fecha" data-fecha="${esc(c.id)}" value="${esc(c.fechaPago)}"></span>
             <span class="muted">${filasVivas(c).length} clientes · ${t.abonados} abonaron</span>
-            <span class="arch-pend" data-pend="${esc(c.id)}">Pendiente 15%: <b>${fmtMoney(t.p15)}</b> · 20%: <b>${fmtMoney(t.p20)}</b></span>
             <span class="row" style="gap:6px;">
+              <span class="fa-wrap">
+                <button class="secondary mini${fa==="todos"?" fa-on":""}" data-fa="todos" data-id="${esc(c.id)}">TODOS</button>
+                <button class="fa-chip si${fa==="abonaron"?" on":""}" data-fa="abonaron" data-id="${esc(c.id)}">CLIENTES QUE ABONARON<b>${nAb}</b></button>
+                <button class="fa-chip no${fa==="no"?" on":""}" data-fa="no" data-id="${esc(c.id)}">CLIENTES QUE NO ABONARON<b>${nNo}</b></button>
+              </span>
               ${pendientesDe(c.id) ? `<button class="mini btn-guardar-todo" data-guardartodo="${esc(c.id)}">💾 GUARDAR TODOS LOS CAMBIOS</button>` : ""}
               <button class="secondary mini" data-pdf="${esc(c.id)}">⬇ DESCARGAR PDF</button>
               <button class="mini btn-nuevos" data-nuevos="${esc(c.id)}" title="Elegí el PDF de la Caja de esta complementaria: se suman solo los actores que falten, sin tocar lo editado">➕ AGREGAR ACTORES NUEVOS</button>
@@ -2343,7 +2355,12 @@ function _renderArchivo(cont){
             <th>#</th><th>DNI</th><th>ACTOR</th><th>Teléfono</th><th>Carátula</th><th>Beneficio</th>
             <th class="num">Bruto</th><th class="num">Descuentos</th><th class="num">Neto</th><th class="num">15%</th><th class="num">20%</th>
             <th>Honorarios</th><th>Liquidación contador</th><th>Comentarios</th><th></th></tr></thead><tbody>`;
+          let ultimoGrupo = null;
           filas.forEach(({f: fGuardada, i}) => {
+            if(fa !== "todos"){
+              const g = esAb({f: fGuardada, i}) ? "abonaron" : "no";
+              if(g !== ultimoGrupo){ ultimoGrupo = g; html += `<tr class="arch-grupo ${g}"><td colspan="15">${g === "abonaron" ? "CLIENTES QUE ABONARON" : "CLIENTES QUE NO ABONARON"}</td></tr>`; }
+            }
             const borrador = BORRADORES.get(c.id + "|" + i);
             const f = borrador || fGuardada;
             const pag = (f.hon === "abono" ? " pagado" : "") + (f.rep ? " repartido" : "");
@@ -2482,6 +2499,7 @@ function conectarArchivo(cont){
     inp.click();
   }));
   cont.querySelectorAll("[data-notif]").forEach(btn => btn.addEventListener("click", () => abrirNotificar(btn.dataset.notif)));
+  cont.querySelectorAll("[data-fa]").forEach(btn => btn.addEventListener("click", () => { archFiltro[btn.dataset.id] = btn.dataset.fa; renderArchivo(); }));
   cont.querySelectorAll("[data-delcomp]").forEach(btn => btn.addEventListener("click", async () => {
     const c = ARCHIVO[btn.dataset.delcomp];
     const n = filasVivas(c).length;
@@ -3439,6 +3457,7 @@ function abrirNotificar(id){
 // =====================================================================
 // CLIENTES DEUDORES: todos los actores de las complementarias guardadas que no abonaron honorarios
 // =====================================================================
+const archFiltro = {};
 let deuFiltro = "todos", deuBusqueda = "", deuOrden = "nombre", comGuardado = "";
 function listaDeudores(){
   const grupos = new Map();
