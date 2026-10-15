@@ -2326,7 +2326,7 @@ function _renderArchivo(cont){
         const nAb = filas.filter(esAb).length, nNo = filas.length - nAb;
         if(fa !== "todos"){
           const ab = filas.filter(esAb), no = filas.filter(x => !esAb(x));
-          filas = fa === "abonaron" ? [...ab, ...no] : [...no, ...ab];
+          filas = fa === "abonaron" ? ab : no;
         }
         const abierto = archAbiertos.has(c.id) || !!q;
         const exp = archExpandida === c.id;
