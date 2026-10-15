@@ -1842,6 +1842,7 @@ document.getElementById("btnPDF").addEventListener("click", () => {
   generarPDF(results, {});
 });
 
+(function(){ const s = document.createElement("style"); s.textContent = `.pct-sel{display:inline-flex;gap:6px;align-items:center;cursor:pointer;white-space:nowrap;padding:6px 10px;border-radius:9px;border:1.5px solid transparent}.pct-sel.on{background:#bfdbfe;border-color:#60a5fa;font-weight:700;color:#1e3a5f}`; document.head.appendChild(s); })();
 // Genera el PDF de una lista de filas. opciones.estado = true agrega el estado de pago
 // (filas con honorarios abonados tachadas); opciones.nombre = nombre del archivo.
 function generarPDF(lista, opciones){
@@ -1874,15 +1875,13 @@ function generarPDF(lista, opciones){
       { header: "Bruto", key: "bruto", w: 62 },
       { header: "Desc", key: "desc", w: 55 },
       { header: "Neto", key: "neto", w: 62 },
-      { header: "15%", key: "q15", w: 55 },
-      { header: "20%", key: "q20", w: 55 },
+      { header: "Honorarios", key: "hon", w: 110 },
     ];
 
     sortedKeys.forEach((key, gi) => {
       const [comp, fecha] = key.split("||");
       const rows = groups.get(key);
-      const total15 = rows.reduce((s,r)=>s+(r.bruto||0)*0.15,0);
-      const total20 = rows.reduce((s,r)=>s+(r.bruto||0)*0.20,0);
+      const totalHon = rows.reduce((s,r)=>s+(r.bruto||0)*((r.pct||20)/100),0);
       let tituloTxt = "Listado Complementaria";
       if(comp && comp !== "SIN-COMPLEMENTARIA") tituloTxt += ` ${comp}`;
       if(fecha) tituloTxt += ` - Fecha de pago: ${fecha}`;
@@ -1920,8 +1919,7 @@ function generarPDF(lista, opciones){
           fmtMoney(r.bruto||0),
           fmtMoney(r.desc||0),
           fmtMoney(r.neto||0),
-          fmtMoney((r.bruto||0)*0.15),
-          fmtMoney((r.bruto||0)*0.20),
+          fmtMoney((r.bruto||0)*((r.pct||20)/100)) + " (" + (r.pct||20) + "%)",
         ];
       });
 
@@ -2056,7 +2054,7 @@ function generarPDF(lista, opciones){
       doc.setFontSize(9);
       doc.setFont(undefined, "bold");
       doc.setTextColor(30,58,95);
-      doc.text(`Total honorarios 15%: ${fmtMoney(total15)}     Total honorarios 20%: ${fmtMoney(total20)}`, pageWidth - margin, finalY, {align:"right"});
+      doc.text(`Total honorarios: ${fmtMoney(totalHon)}`, pageWidth - margin, finalY, {align:"right"});
       if(rows.some(r => r.dudoso)){
         doc.setFontSize(7.5);
         doc.setFont(undefined, "normal");
@@ -2367,8 +2365,8 @@ function _renderArchivo(cont){
               <td class="num"><input data-f="bruto" value="${(f.bruto||0).toFixed(2)}" style="width:88px;text-align:right;"></td>
               <td class="num"><input data-f="desc" value="${(f.desc||0).toFixed(2)}" style="width:88px;text-align:right;"></td>
               <td class="num"><input data-f="neto" value="${(f.neto||0).toFixed(2)}" style="width:88px;text-align:right;"></td>
-              <td class="num">${fmtMoney((f.bruto||0)*0.15)}</td>
-              <td class="num">${fmtMoney((f.bruto||0)*0.20)}</td>
+              <td class="num"><label class="pct-sel${(f.pct||20)===15?" on":""}"><input type="radio" name="pct-${c.id.replace(/\W/g,"")}-${i}" data-pct="15" ${(f.pct||20)===15?"checked":""}> ${fmtMoney((f.bruto||0)*0.15)}</label></td>
+              <td class="num"><label class="pct-sel${(f.pct||20)===20?" on":""}"><input type="radio" name="pct-${c.id.replace(/\W/g,"")}-${i}" data-pct="20" ${(f.pct||20)===20?"checked":""}> ${fmtMoney((f.bruto||0)*0.20)}</label></td>
               <td class="estado">
                 <label class="chk ok"><input type="checkbox" data-chk="hon" data-v="abono" ${f.hon==="abono"?"checked":""}> ABONÓ HONORARIOS</label>
                 <label class="chk no"><input type="checkbox" data-chk="hon" data-v="nopago" ${f.hon==="nopago"?"checked":""}> NO ABONÓ HONORARIOS</label>
@@ -2580,6 +2578,11 @@ function conectarArchivo(cont){
       setTimeout(() => { btn.textContent = previo; }, 2000);
     });
     tr.querySelector("[data-compartir]").addEventListener("click", () => abrirCompartir(c, BORRADORES.get(clave) || c.filas[i]));
+    tr.querySelectorAll("[data-pct]").forEach(rd => rd.addEventListener("change", () => {
+      const b = borrador(); b.pct = +rd.dataset.pct;
+      b.honRecibo = Math.round((b.bruto || 0) * b.pct / 100);   // se guarda con el porcentaje elegido (sin abrir el recibo)
+      renderArchivo();
+    }));
     tr.querySelector("[data-guardarfila]").addEventListener("click", () => {
       if(BORRADORES.has(clave)){
         c.filas[i] = Object.assign(BORRADORES.get(clave), { mod: ahoraMs(), nuevo: false }); BORRADORES.delete(clave);
@@ -3083,8 +3086,8 @@ function abrirRecibo(c, f, clave){
         <label>Decreto abonado<select data-dec="1" class="recibo-sel">${DECRETOS_RECIBO.map(x => `<option ${x === d.decreto ? "selected" : ""}>${x}</option>`).join("")}</select></label>
         <div class="comp-pct recibo-pct">
           <div class="comp-pct-t">Honorarios (sobre el importe bruto de ${fmtMoney(f.bruto || 0)}):</div>
-          <label class="sel"><input type="radio" name="recPct" value="15"> <b>15%</b> = ${fmtMoney((f.bruto||0)*0.15)}</label>
-          <label class="sel"><input type="radio" name="recPct" value="20" checked> <b>20%</b> = ${fmtMoney((f.bruto||0)*0.20)}</label>
+          <label class="sel"><input type="radio" name="recPct" value="15" ${f.pct===15?"checked":""}> <b>15%</b> = ${fmtMoney((f.bruto||0)*0.15)}</label>
+          <label class="sel"><input type="radio" name="recPct" value="20" ${f.pct===15?"":"checked"}> <b>20%</b> = ${fmtMoney((f.bruto||0)*0.20)}</label>
         </div>
         <div class="row" style="gap:8px;">
           <label style="flex:1;">Importe ($)<input data-r="importe" value="${esc(d.importe)}"></label>
