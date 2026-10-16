@@ -1339,6 +1339,20 @@ function matchClients(records){
           if(!dados.length || dados.length >= nombreTokens.length) continue;
           if(!dados.every(t => nombreTokens.includes(t))) continue;
           if(dados[0] !== undefined && !nombreTokens.includes(dados[0])) continue;
+          // Si el nombre incompleto en realidad es OTRA persona, no se toma. Ej.: contacto "LOPEZ, RUBEN"
+          // cuya caratula es "LOPEZ, RUBEN LEONARDO", o que existe otro contacto "LOPEZ, RUBEN LEONARDO":
+          // el pago a "LOPEZ, RUBEN HECTOR" no es de ese cliente.
+          const otroNombre = toks => { const extra = toks.filter(t => !apSet.has(t) && !dados.includes(t));
+            return extra.length && extra.some(t => !nombreTokens.includes(t)); };
+          const otroContacto = [...candidateIdx].some(j => {
+            if(j === idx) return false;
+            const n2 = normalizeName(CLIENTS_DB[j].name);           // tiene que estar agendado como "APELLIDO, NOMBRES ..."
+            if(apT.some((t, k) => n2[k] !== t) || n2[apT.length] !== dados[0]) return false;
+            return dados.every(t => n2.includes(t)) && otroNombre(n2);
+          });
+          const caratulaPropia = [...(c.caratula || "").matchAll(/"([^"]+)"/g)].map(x => normalizeName(x[1].replace(/\s+Y\s+O(TROS?)?\.?\s*$/i, "")))
+            .some(toks => apT.every(t => toks.includes(t)) && dados.every(t => toks.includes(t)) && otroNombre(toks));
+          if(otroContacto || caratulaPropia) continue;
           found = true;
           matched.push({...rec, clienteVcf: c.name, telefono: (c.phones||[]).join("\n"), caratulaDb: c.caratula||"", verificado: "nombre", casada: vi > 0, parcial: true});
           break;
