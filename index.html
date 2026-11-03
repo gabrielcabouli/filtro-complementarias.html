@@ -1842,8 +1842,6 @@ document.getElementById("btnPDF").addEventListener("click", () => {
   generarPDF(results, {});
 });
 
-(function(){ const s = document.createElement("style"); s.textContent = `.pct-sel{display:inline-flex;gap:6px;align-items:center;cursor:pointer;white-space:nowrap;padding:6px 10px;border-radius:9px;border:1.5px solid transparent}.pct-sel.on{background:#bfdbfe;border-color:#60a5fa;font-weight:700;color:#1e3a5f}`; document.head.appendChild(s); })();
-(function(){ const s = document.createElement("style"); s.textContent = `.fa-wrap{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap}.fa-on{background:#2563eb !important;color:#fff !important;border-color:#2563eb !important}.fa-chip{font:800 10px "Segoe UI",system-ui,sans-serif;padding:3px 8px;border-radius:999px;border:1.5px solid #cbd5e1;background:#fff;color:#334155;cursor:pointer;white-space:nowrap;letter-spacing:.02em}.fa-chip b{margin-left:5px;background:#e2e8f0;color:#334155;padding:0 5px;border-radius:999px}.fa-chip.si{border-color:#16a34a;color:#15803d}.fa-chip.si.on{background:#16a34a;color:#fff}.fa-chip.si.on b{background:#fff;color:#15803d}.fa-chip.no{border-color:#dc2626;color:#b91c1c}.fa-chip.no.on{background:#dc2626;color:#fff}.fa-chip.no.on b{background:#fff;color:#b91c1c}.arch-grupo td{font:800 11px "Segoe UI",system-ui,sans-serif;letter-spacing:.05em;padding:6px 10px;text-transform:uppercase}.arch-grupo.abonaron td{background:#dcfce7;color:#14532d}.arch-grupo.no td{background:#fee2e2;color:#7f1d1d}`; document.head.appendChild(s); })();
 // Genera el PDF de una lista de filas. opciones.estado = true agrega el estado de pago
 // (filas con honorarios abonados tachadas); opciones.nombre = nombre del archivo.
 function generarPDF(lista, opciones){
@@ -1876,13 +1874,15 @@ function generarPDF(lista, opciones){
       { header: "Bruto", key: "bruto", w: 62 },
       { header: "Desc", key: "desc", w: 55 },
       { header: "Neto", key: "neto", w: 62 },
-      { header: "Honorarios", key: "hon", w: 110 },
+      { header: "15%", key: "q15", w: 55 },
+      { header: "20%", key: "q20", w: 55 },
     ];
 
     sortedKeys.forEach((key, gi) => {
       const [comp, fecha] = key.split("||");
       const rows = groups.get(key);
-      const totalHon = rows.reduce((s,r)=>s+(r.bruto||0)*((r.pct||20)/100),0);
+      const total15 = rows.reduce((s,r)=>s+(r.bruto||0)*0.15,0);
+      const total20 = rows.reduce((s,r)=>s+(r.bruto||0)*0.20,0);
       let tituloTxt = "Listado Complementaria";
       if(comp && comp !== "SIN-COMPLEMENTARIA") tituloTxt += ` ${comp}`;
       if(fecha) tituloTxt += ` - Fecha de pago: ${fecha}`;
@@ -1920,7 +1920,8 @@ function generarPDF(lista, opciones){
           fmtMoney(r.bruto||0),
           fmtMoney(r.desc||0),
           fmtMoney(r.neto||0),
-          fmtMoney((r.bruto||0)*((r.pct||20)/100)) + " (" + (r.pct||20) + "%)",
+          fmtMoney((r.bruto||0)*0.15),
+          fmtMoney((r.bruto||0)*0.20),
         ];
       });
 
@@ -2055,7 +2056,7 @@ function generarPDF(lista, opciones){
       doc.setFontSize(9);
       doc.setFont(undefined, "bold");
       doc.setTextColor(30,58,95);
-      doc.text(`Total honorarios: ${fmtMoney(totalHon)}`, pageWidth - margin, finalY, {align:"right"});
+      doc.text(`Total honorarios 15%: ${fmtMoney(total15)}     Total honorarios 20%: ${fmtMoney(total20)}`, pageWidth - margin, finalY, {align:"right"});
       if(rows.some(r => r.dudoso)){
         doc.setFontSize(7.5);
         doc.setFont(undefined, "normal");
@@ -2317,17 +2318,10 @@ function _renderArchivo(cont){
     if(!cerrado){
       lista.forEach(c => {
         const claveOrden = f => stripAccents(f.name || "").toUpperCase().replace(/[^A-Z ,]/g, "").trim();
-        let filas = c.filas.map((f,i) => ({f,i})).sort((a,b) => claveOrden(a.f).localeCompare(claveOrden(b.f), "es")).filter(({f}) => !f.borrado).filter(({f}) => !q ||
+        const filas = c.filas.map((f,i) => ({f,i})).sort((a,b) => claveOrden(a.f).localeCompare(claveOrden(b.f), "es")).filter(({f}) => !f.borrado).filter(({f}) => !q ||
           stripAccents(f.name||"").toUpperCase().includes(q) || (f.docnum||"").includes(q));
         if(q && !filas.length) return;
         const t = totalesComp(c);
-        const fa = archFiltro[c.id] || "todos";
-        const esAb = ({f, i}) => ((BORRADORES.get(c.id + "|" + i) || f).hon === "abono");
-        const nAb = filas.filter(esAb).length, nNo = filas.length - nAb;
-        if(fa !== "todos"){
-          const ab = filas.filter(esAb), no = filas.filter(x => !esAb(x));
-          filas = fa === "abonaron" ? ab : no;
-        }
         const abierto = archAbiertos.has(c.id) || !!q;
         const exp = archExpandida === c.id;
         html += `<div class="arch-comp${exp ? " expandida" : ""}" data-id="${esc(c.id)}">
@@ -2338,12 +2332,8 @@ function _renderArchivo(cont){
             <b class="arch-titulo">Complementaria ${esc(c.complementaria || "sin número")}</b>
             <span>Fecha de pago: <input class="arch-fecha" data-fecha="${esc(c.id)}" value="${esc(c.fechaPago)}"></span>
             <span class="muted">${filasVivas(c).length} clientes · ${t.abonados} abonaron</span>
+            <span class="arch-pend" data-pend="${esc(c.id)}">Pendiente 15%: <b>${fmtMoney(t.p15)}</b> · 20%: <b>${fmtMoney(t.p20)}</b></span>
             <span class="row" style="gap:6px;">
-              <span class="fa-wrap">
-                <button class="secondary mini${fa==="todos"?" fa-on":""}" data-fa="todos" data-id="${esc(c.id)}">TODOS</button>
-                <button class="fa-chip si${fa==="abonaron"?" on":""}" data-fa="abonaron" data-id="${esc(c.id)}">CLIENTES QUE ABONARON<b>${nAb}</b></button>
-                <button class="fa-chip no${fa==="no"?" on":""}" data-fa="no" data-id="${esc(c.id)}">CLIENTES QUE NO ABONARON<b>${nNo}</b></button>
-              </span>
               ${pendientesDe(c.id) ? `<button class="mini btn-guardar-todo" data-guardartodo="${esc(c.id)}">💾 GUARDAR TODOS LOS CAMBIOS</button>` : ""}
               <button class="secondary mini" data-pdf="${esc(c.id)}">⬇ DESCARGAR PDF</button>
               <button class="mini btn-nuevos" data-nuevos="${esc(c.id)}" title="Elegí el PDF de la Caja de esta complementaria: se suman solo los actores que falten, sin tocar lo editado">➕ AGREGAR ACTORES NUEVOS</button>
@@ -2355,12 +2345,7 @@ function _renderArchivo(cont){
             <th>#</th><th>DNI</th><th>ACTOR</th><th>Teléfono</th><th>Carátula</th><th>Beneficio</th>
             <th class="num">Bruto</th><th class="num">Descuentos</th><th class="num">Neto</th><th class="num">15%</th><th class="num">20%</th>
             <th>Honorarios</th><th>Liquidación contador</th><th>Comentarios</th><th></th></tr></thead><tbody>`;
-          let ultimoGrupo = null;
           filas.forEach(({f: fGuardada, i}) => {
-            if(fa !== "todos"){
-              const g = esAb({f: fGuardada, i}) ? "abonaron" : "no";
-              if(g !== ultimoGrupo){ ultimoGrupo = g; html += `<tr class="arch-grupo ${g}"><td colspan="15">${g === "abonaron" ? "CLIENTES QUE ABONARON" : "CLIENTES QUE NO ABONARON"}</td></tr>`; }
-            }
             const borrador = BORRADORES.get(c.id + "|" + i);
             const f = borrador || fGuardada;
             const pag = (f.hon === "abono" ? " pagado" : "") + (f.rep ? " repartido" : "");
@@ -2382,8 +2367,8 @@ function _renderArchivo(cont){
               <td class="num"><input data-f="bruto" value="${(f.bruto||0).toFixed(2)}" style="width:88px;text-align:right;"></td>
               <td class="num"><input data-f="desc" value="${(f.desc||0).toFixed(2)}" style="width:88px;text-align:right;"></td>
               <td class="num"><input data-f="neto" value="${(f.neto||0).toFixed(2)}" style="width:88px;text-align:right;"></td>
-              <td class="num"><label class="pct-sel${(f.pct||20)===15?" on":""}"><input type="radio" name="pct-${c.id.replace(/\W/g,"")}-${i}" data-pct="15" ${(f.pct||20)===15?"checked":""}> ${fmtMoney((f.bruto||0)*0.15)}</label></td>
-              <td class="num"><label class="pct-sel${(f.pct||20)===20?" on":""}"><input type="radio" name="pct-${c.id.replace(/\W/g,"")}-${i}" data-pct="20" ${(f.pct||20)===20?"checked":""}> ${fmtMoney((f.bruto||0)*0.20)}</label></td>
+              <td class="num">${fmtMoney((f.bruto||0)*0.15)}</td>
+              <td class="num">${fmtMoney((f.bruto||0)*0.20)}</td>
               <td class="estado">
                 <label class="chk ok"><input type="checkbox" data-chk="hon" data-v="abono" ${f.hon==="abono"?"checked":""}> ABONÓ HONORARIOS</label>
                 <label class="chk no"><input type="checkbox" data-chk="hon" data-v="nopago" ${f.hon==="nopago"?"checked":""}> NO ABONÓ HONORARIOS</label>
@@ -2499,7 +2484,6 @@ function conectarArchivo(cont){
     inp.click();
   }));
   cont.querySelectorAll("[data-notif]").forEach(btn => btn.addEventListener("click", () => abrirNotificar(btn.dataset.notif)));
-  cont.querySelectorAll("[data-fa]").forEach(btn => btn.addEventListener("click", () => { archFiltro[btn.dataset.id] = btn.dataset.fa; renderArchivo(); }));
   cont.querySelectorAll("[data-delcomp]").forEach(btn => btn.addEventListener("click", async () => {
     const c = ARCHIVO[btn.dataset.delcomp];
     const n = filasVivas(c).length;
@@ -2581,6 +2565,19 @@ function conectarArchivo(cont){
       f[k] = chk.checked ? chk.dataset.v : "";   // las dos opciones de cada grupo se excluyen entre si
       renderArchivo();
     }));
+    tr.querySelectorAll("[data-elegir]").forEach(b => b.addEventListener("click", e => {
+      e.preventDefault(); e.stopPropagation();
+      const f = borrador(), j = +b.dataset.elegir;
+      if(!f.caratulaOriginal) f.caratulaOriginal = f.caratula || "";   // guarda la lista completa para poder restaurarla
+      f.caratula = listaJuicios(f)[j] || "";                            // queda solo el juicio elegido (se puede cambiar)
+      renderArchivo();
+    }));
+    tr.querySelectorAll("[data-restaurar]").forEach(b => b.addEventListener("click", e => {
+      e.preventDefault(); e.stopPropagation();
+      const f = borrador();
+      f.caratula = f.caratulaOriginal || ""; delete f.caratulaOriginal;
+      renderArchivo();
+    }));
     tr.querySelector("[data-recibo]").addEventListener("click", () => abrirRecibo(c, BORRADORES.get(clave) || c.filas[i], clave));
     tr.querySelector("[data-copiar-aviso]").addEventListener("click", async e => {
       const btn = e.currentTarget;
@@ -2596,11 +2593,6 @@ function conectarArchivo(cont){
       setTimeout(() => { btn.textContent = previo; }, 2000);
     });
     tr.querySelector("[data-compartir]").addEventListener("click", () => abrirCompartir(c, BORRADORES.get(clave) || c.filas[i]));
-    tr.querySelectorAll("[data-pct]").forEach(rd => rd.addEventListener("change", () => {
-      const b = borrador(); b.pct = +rd.dataset.pct;
-      b.honRecibo = Math.round((b.bruto || 0) * b.pct / 100);   // se guarda con el porcentaje elegido (sin abrir el recibo)
-      renderArchivo();
-    }));
     tr.querySelector("[data-guardarfila]").addEventListener("click", () => {
       if(BORRADORES.has(clave)){
         c.filas[i] = Object.assign(BORRADORES.get(clave), { mod: ahoraMs(), nuevo: false }); BORRADORES.delete(clave);
@@ -2794,6 +2786,7 @@ const TEXTO_CONTADOR = "Tenga presente que la liquidación del juicio presenta e
 // Por defecto: 20% e INFORMAR RELIQUIDACION CONTADOR
 function abrirCompartir(c, f){ abrirCompartirModal(c, f, true); }
 function abrirCompartirModal(c, f, conContador){
+  if(!juicioElegidoOk(f)) return;
   let pct = 20;
   const caratulas = (f.caratula || "").split("||").map(x => x.trim()).filter(Boolean).map(leerCaratula);
   let sel = 0;
@@ -3079,6 +3072,7 @@ const GASTOS_CONTABLE = 150000;
 const DECRETOS_RECIBO = ["DECRETO 380/17", "DECRETO 2140/13", "DECRETO 2744/93"];
 function claveDecreto(t){ const m = /(2140|380|2744)/.exec(t || ""); return m ? m[1] : ""; }
 function abrirRecibo(c, f, clave){
+  if(!juicioElegidoOk(f)) return;
   const cars = (f.caratula || "").split("||").map(x => x.trim()).filter(Boolean).map(leerCaratula);
   const car0 = cars.find(k => claveDecreto(k.decreto)) || cars[0] || {};
   const dec0 = DECRETOS_RECIBO.find(x => claveDecreto(x) === claveDecreto(car0.decreto)) || "DECRETO 2140/13";
@@ -3101,11 +3095,11 @@ function abrirRecibo(c, f, clave){
           <label style="flex:1;">DNI<input data-r="dni" value="${esc(d.dni)}"></label>
           <label style="flex:1;">Fecha<input data-r="fecha" value="${esc(d.fecha)}"></label>
         </div>
-        <label>Decreto abonado<select data-dec="1" class="recibo-sel">${DECRETOS_RECIBO.map(x => `<option ${x === d.decreto ? "selected" : ""}>${x}</option>`).join("")}</select></label>
+        <label>Decreto abonado<select data-dec="1" class="recibo-sel" ${f.caratulaOriginal ? "disabled" : ""}>${DECRETOS_RECIBO.filter(x => !f.caratulaOriginal || x === d.decreto).map(x => `<option ${x === d.decreto ? "selected" : ""}>${x}</option>`).join("")}</select></label>
         <div class="comp-pct recibo-pct">
           <div class="comp-pct-t">Honorarios (sobre el importe bruto de ${fmtMoney(f.bruto || 0)}):</div>
-          <label class="sel"><input type="radio" name="recPct" value="15" ${f.pct===15?"checked":""}> <b>15%</b> = ${fmtMoney((f.bruto||0)*0.15)}</label>
-          <label class="sel"><input type="radio" name="recPct" value="20" ${f.pct===15?"":"checked"}> <b>20%</b> = ${fmtMoney((f.bruto||0)*0.20)}</label>
+          <label class="sel"><input type="radio" name="recPct" value="15"> <b>15%</b> = ${fmtMoney((f.bruto||0)*0.15)}</label>
+          <label class="sel"><input type="radio" name="recPct" value="20" checked> <b>20%</b> = ${fmtMoney((f.bruto||0)*0.20)}</label>
         </div>
         <div class="row" style="gap:8px;">
           <label style="flex:1;">Importe ($)<input data-r="importe" value="${esc(d.importe)}"></label>
@@ -3202,7 +3196,8 @@ function abrirRecibo(c, f, clave){
 const REP_RESPONSABLE = {1: "Guillermo", 2: "Guillermo", 6: "Guillermo", 3: "Roberta y Damián", 4: "Roberta y Damián", 7: "Roberta y Damián", 10: "Roberta y Damián"};
 const REP_GABRIEL = [5, 8, 9];
 function juzgadoRep(f){
-  if(f.juzgado) return +f.juzgado;
+  // si hay un juicio elegido, manda su juzgado; si no, el juzgado cargado a mano
+  if(!f.caratulaOriginal && f.juzgado) return +f.juzgado;
   for(const t of (f.caratula || "").split("||").map(x => x.trim()).filter(Boolean)){
     const m = /(\d+)\s*$/.exec(leerCaratula(t).juzgado || "");
     if(m) return +m[1];
@@ -3254,9 +3249,8 @@ function abrirReparto(c, f, clave){
         <div class="rep-card neto"><div class="lbl">Neto a repartir</div><div class="val">${fmtMoney(r.neto)}</div></div>
       </div>
       <label class="rep-jz"><span>Juzgado</span>
-        <select data-jz>${["", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => `<option value="${n}" ${r.j === n ? "selected" : ""}>${n || "—"}</option>`).join("")}</select>
+        <select data-jz ${f.caratulaOriginal ? "disabled" : ""}>${["", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => `<option value="${n}" ${r.j === n ? "selected" : ""}>${n || "—"}</option>`).join("")}</select>
       </label>
-      ${f.cont === "pago" ? `<div class="rep-gastos">SEPARAR GASTOS ESTUDIO CONTABLE $${GASTOS_CONTABLE.toLocaleString("es-AR")}<small>(no incluidos en el reparto)</small></div>` : ""}
       ${r.filas ? `<table class="rep-tab"><thead><tr><th>Integrante</th><th class="num">%</th><th class="num">Monto</th></tr></thead><tbody>${filasHtml}</tbody></table>`
                 : `<div class="recibo-hint no">⚠️ Falta el juzgado: elegilo arriba para ver el reparto.</div>`}
       <div class="actions rep-actions"><button class="rep-cerrar" data-a="cerrar">CERRAR</button></div>
@@ -3317,8 +3311,6 @@ function abrirReparto(c, f, clave){
     .rep-actions{justify-content:flex-end}
     .rep-cerrar{background:#1e3a5f;color:#fff;border:none;border-radius:10px;padding:10px 22px;font:800 13px "IBM Plex Sans",system-ui,sans-serif;letter-spacing:.06em;cursor:pointer;box-shadow:0 4px 12px rgba(30,58,95,.3)}
     .rep-cerrar:hover{background:#2563eb}
-    .rep-gastos{background:#9d174d;color:#fff;border-radius:12px;padding:12px 14px;font:800 14px "IBM Plex Sans",system-ui,sans-serif;letter-spacing:.04em;text-transform:uppercase;box-shadow:0 4px 12px rgba(157,23,77,.3)}
-    .rep-gastos small{display:block;text-transform:none;font-weight:600;letter-spacing:0;font-size:12px;margin-top:3px;opacity:.92}
     @media (max-width:480px){ .rep-cards{grid-template-columns:1fr} .rep-head h3{font-size:19px} }`;
   document.head.appendChild(s);
 })();
@@ -3328,14 +3320,35 @@ function abrirReparto(c, f, clave){
 // El número y el año salen de la carátula (2140 / 380). En la extensión, el pedido lo
 // toma pjn.js dentro del Sistema de Consultas Web y abre el expediente solo.
 // =====================================================================
+function juiciosDeFila(f){ return (f.caratula || "").split("||").map(x => x.trim()).filter(Boolean); }
+// Si el actor tiene varios juicios, hay que elegir uno antes de seguir (recibo, liquidacion).
+function juicioElegidoOk(f){
+  const n = juiciosDeFila(f).length;
+  if(n > 1){ alert(`Este actor tiene ${n} juicios cargados.\nPrimero elegí el que corresponde (botón ELEGIR ESTE) y después seguí con el recibo o la liquidación.`); return false; }
+  return true;
+}
+function listaJuicios(f){ return juiciosDeFila({caratula: f.caratulaOriginal || f.caratula}); }
 function pjnBotones(f){
-  const items = (f.caratula || "").split("||").map(x => x.trim()).filter(Boolean).map(t => {
+  const todas = listaJuicios(f);
+  if(!todas.length) return "";
+  const hayVarias = todas.length > 1, elegido = !!f.caratulaOriginal;
+  const opciones = todas.map((t, j) => {
     const k = leerCaratula(t);
     const m = /^(\d+)\/(\d{2}|\d{4})$/.exec(k.expte || "");
-    return m ? {numero: m[1], anio: m[2].length === 2 ? "20" + m[2] : m[2], dec: (k.decreto || "").replace(/^decreto\s*/i, "")} : null;
-  }).filter(Boolean);
-  if(!items.length) return "";
-  return `<div class="pjn-row"><span class="pjn-hint">Tocar para abrir expediente</span>${items.map(x => `<button type="button" class="btn-pjn" data-pjn-numero="${esc(x.numero)}" data-pjn-anio="${esc(x.anio)}" title="Abrir el expediente en el PJN">${x.dec ? "DTO. " + esc(x.dec) + " " : ""}Expt. n° ${esc(x.numero)}/${esc(x.anio)}</button>`).join("")}</div>`;
+    const dec = (k.decreto || "").replace(/^decreto\s*/i, "");
+    const txt = (dec ? "DTO. " + dec + " " : "") + (m ? "Expt. n° " + m[1] + "/" + m[2] : (k.juicio || t));
+    const pjn = m
+      ? `<button type="button" class="btn-pjn" data-pjn-numero="${esc(m[1])}" data-pjn-anio="${esc(m[2].length === 2 ? "20" + m[2] : m[2])}" title="Abrir el expediente en el PJN">${esc(txt)}</button>`
+      : `<span class="btn-pjn-no">${esc(txt)}</span>`;
+    const esEste = elegido && f.caratula === t;
+    const eleg = hayVarias ? `<button type="button" class="btn-elegir${esEste ? " on" : ""}" data-elegir="${j}" title="Trabajar solo con este juicio: los demás se quitan">${esEste ? "✓ ELEGIDO" : "ELEGIR ESTE"}</button>` : "";
+    const apagado = elegido && !esEste ? " jui-descartado" : "";
+    return `<div class="jui-opcion${apagado}">${eleg}${pjn}</div>`;
+  }).join("");
+  const aviso = hayVarias && !elegido ? `<span class="jui-aviso">⚠ Elegí el juicio que corresponde</span>`
+    : (elegido ? `<span class="jui-ok">✓ Juicio elegido</span>` : "");
+  const restaurar = elegido ? `<button type="button" class="btn-restaurar" data-restaurar="1">↩ Restaurar juicios quitados</button>` : "";
+  return `<div class="pjn-row">${aviso}<span class="pjn-hint">Tocar para abrir expediente</span>${opciones}${restaurar}</div>`;
 }
 function abrirExpedientePJN(numero, anio){
   if(!(typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id)){
@@ -3358,7 +3371,16 @@ document.addEventListener("click", e => {
     .pjn-row{display:flex;flex-direction:column;gap:6px;margin-top:6px;width:max-content;max-width:100%}
     .pjn-hint{font:700 10px "IBM Plex Sans",system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#2563eb}
     .btn-pjn{font:700 11px "IBM Plex Sans",system-ui,sans-serif;text-align:left;padding:6px 10px;border-radius:8px;cursor:pointer;background:linear-gradient(135deg,#eef3fa,#dbe7fd);color:#1e3a5f;border:1px solid #93c5fd;white-space:nowrap}
-    .btn-pjn:hover{background:linear-gradient(135deg,#dbe7fd,#bfdbfe);border-color:#2563eb}`;
+    .btn-pjn:hover{background:linear-gradient(135deg,#dbe7fd,#bfdbfe);border-color:#2563eb}
+    .jui-opcion{display:flex;gap:6px;align-items:center;flex-wrap:wrap;transition:opacity .15s}
+    .jui-opcion.jui-descartado{opacity:.45;filter:grayscale(1)}
+    .jui-opcion.jui-descartado:hover{opacity:.9;filter:none}
+    .btn-elegir{font:800 10px "IBM Plex Sans",system-ui,sans-serif;padding:5px 8px;border-radius:6px;border:1px solid #15803d;background:#dcfce7;color:#15803d;cursor:pointer;white-space:nowrap}
+    .btn-elegir:hover{background:#15803d;color:#fff}
+    .btn-pjn-no{font:700 11px "IBM Plex Sans",system-ui,sans-serif;padding:6px 10px;border:1px dashed #cbd5e1;border-radius:8px;color:#64748b}
+    .jui-aviso{font:800 10.5px "IBM Plex Sans",system-ui,sans-serif;color:#b45309;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:4px 6px}
+    .jui-ok{font:800 10.5px "IBM Plex Sans",system-ui,sans-serif;color:#15803d;background:#dcfce7;border:1px solid #86efac;border-radius:6px;padding:4px 6px}
+    .btn-restaurar{font:700 10.5px "IBM Plex Sans",system-ui,sans-serif;background:transparent;border:1px dashed #64748b;color:#334155;border-radius:6px;padding:4px 8px;cursor:pointer}`;
   document.head.appendChild(s);
 })();
 
@@ -3457,7 +3479,6 @@ function abrirNotificar(id){
 // =====================================================================
 // CLIENTES DEUDORES: todos los actores de las complementarias guardadas que no abonaron honorarios
 // =====================================================================
-const archFiltro = {};
 let deuFiltro = "todos", deuBusqueda = "", deuOrden = "nombre", comGuardado = "";
 function listaDeudores(){
   const grupos = new Map();
