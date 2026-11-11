@@ -234,6 +234,16 @@
   .modal .comp-cont label{display:flex; align-items:center; gap:6px; margin:0; color:#1e293b; font-size:14px; font-weight:400;}
   .modal .comp-cont label input{display:inline-block; width:18px; height:18px; margin:0;}
   .comp-cont-txt{flex:1 1 100%; font-size:12.5px; color:#7c2d12; margin-top:4px; line-height:1.4; text-align:justify;}
+  .comp-transf{border:1px solid #93c5fd; border-radius:10px; padding:8px 12px; margin:12px 0; background:#eff6ff; display:flex; flex-direction:column; gap:2px;}
+  .modal .comp-transf label{display:flex; align-items:center; gap:6px; margin:0; padding:7px 8px; border-radius:8px; cursor:pointer; color:#1e293b; font-size:14px; font-weight:400;}
+  .modal .comp-transf label.sel{background:#bfdbfe;}
+  .modal .comp-transf label input{display:inline-block; width:18px; height:18px; margin:0;}
+  .comp-transf.si{background:#dbeafe; border-color:#60a5fa;}
+  .comp-transf-opc{display:flex; gap:8px; margin-top:6px;}
+  .modal .comp-transf-opc label{flex:1; display:flex; align-items:center; gap:6px; margin:0; padding:6px 8px; border:1px solid #93c5fd; border-radius:8px; background:#fff; cursor:pointer; color:#1e293b; font-size:13px; font-weight:400;}
+  .modal .comp-transf-opc label.sel{background:#bfdbfe;}
+  .modal .comp-transf-opc label input{display:inline-block; width:16px; height:16px; margin:0;}
+  .comp-transf-txt{font-size:13px; color:#1e3a8a; margin-top:4px; padding-left:8px;}
   .comp-pct{background:#fffbeb; border:1px solid #fcd34d; border-radius:10px; padding:10px 12px;}
   .comp-pct-t{font-size:13px; font-weight:700; color:#92400e; margin-bottom:6px;}
   .comp-pct label{display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:8px; cursor:pointer; font-size:15px;}
@@ -1842,6 +1852,8 @@ document.getElementById("btnPDF").addEventListener("click", () => {
   generarPDF(results, {});
 });
 
+(function(){ const s = document.createElement("style"); s.textContent = `.pct-sel{display:inline-flex;gap:6px;align-items:center;cursor:pointer;white-space:nowrap;padding:6px 10px;border-radius:9px;border:1.5px solid transparent}.pct-sel.on{background:#bfdbfe;border-color:#60a5fa;font-weight:700;color:#1e3a5f}`; document.head.appendChild(s); })();
+(function(){ const s = document.createElement("style"); s.textContent = `.fa-wrap{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap}.fa-on{background:#2563eb !important;color:#fff !important;border-color:#2563eb !important}.fa-chip{font:800 10px "Segoe UI",system-ui,sans-serif;padding:3px 8px;border-radius:999px;border:1.5px solid #cbd5e1;background:#fff;color:#334155;cursor:pointer;white-space:nowrap;letter-spacing:.02em}.fa-chip b{margin-left:5px;background:#e2e8f0;color:#334155;padding:0 5px;border-radius:999px}.fa-chip.si{border-color:#16a34a;color:#15803d}.fa-chip.si.on{background:#16a34a;color:#fff}.fa-chip.si.on b{background:#fff;color:#15803d}.fa-chip.no{border-color:#dc2626;color:#b91c1c}.fa-chip.no.on{background:#dc2626;color:#fff}.fa-chip.no.on b{background:#fff;color:#b91c1c}.arch-grupo td{font:800 11px "Segoe UI",system-ui,sans-serif;letter-spacing:.05em;padding:6px 10px;text-transform:uppercase}.arch-grupo.abonaron td{background:#dcfce7;color:#14532d}.arch-grupo.no td{background:#fee2e2;color:#7f1d1d}`; document.head.appendChild(s); })();
 // Genera el PDF de una lista de filas. opciones.estado = true agrega el estado de pago
 // (filas con honorarios abonados tachadas); opciones.nombre = nombre del archivo.
 function generarPDF(lista, opciones){
@@ -1874,15 +1886,13 @@ function generarPDF(lista, opciones){
       { header: "Bruto", key: "bruto", w: 62 },
       { header: "Desc", key: "desc", w: 55 },
       { header: "Neto", key: "neto", w: 62 },
-      { header: "15%", key: "q15", w: 55 },
-      { header: "20%", key: "q20", w: 55 },
+      { header: "Honorarios", key: "hon", w: 110 },
     ];
 
     sortedKeys.forEach((key, gi) => {
       const [comp, fecha] = key.split("||");
       const rows = groups.get(key);
-      const total15 = rows.reduce((s,r)=>s+(r.bruto||0)*0.15,0);
-      const total20 = rows.reduce((s,r)=>s+(r.bruto||0)*0.20,0);
+      const totalHon = rows.reduce((s,r)=>s+(r.bruto||0)*((r.pct||20)/100),0);
       let tituloTxt = "Listado Complementaria";
       if(comp && comp !== "SIN-COMPLEMENTARIA") tituloTxt += ` ${comp}`;
       if(fecha) tituloTxt += ` - Fecha de pago: ${fecha}`;
@@ -1920,8 +1930,7 @@ function generarPDF(lista, opciones){
           fmtMoney(r.bruto||0),
           fmtMoney(r.desc||0),
           fmtMoney(r.neto||0),
-          fmtMoney((r.bruto||0)*0.15),
-          fmtMoney((r.bruto||0)*0.20),
+          fmtMoney((r.bruto||0)*((r.pct||20)/100)) + " (" + (r.pct||20) + "%)",
         ];
       });
 
@@ -2056,7 +2065,7 @@ function generarPDF(lista, opciones){
       doc.setFontSize(9);
       doc.setFont(undefined, "bold");
       doc.setTextColor(30,58,95);
-      doc.text(`Total honorarios 15%: ${fmtMoney(total15)}     Total honorarios 20%: ${fmtMoney(total20)}`, pageWidth - margin, finalY, {align:"right"});
+      doc.text(`Total honorarios: ${fmtMoney(totalHon)}`, pageWidth - margin, finalY, {align:"right"});
       if(rows.some(r => r.dudoso)){
         doc.setFontSize(7.5);
         doc.setFont(undefined, "normal");
@@ -2253,41 +2262,6 @@ function totalesComp(c){
   return {p15, p20, t15, t20, abonados};
 }
 
-// ---- Aviso al cliente: fecha de aviso y alerta a los 7 dias habiles sin pago ----
-// Feriados nacionales (revisar cada año; los trasladables cambian)
-const FERIADOS_ARG = ["2026-01-01","2026-02-16","2026-02-17","2026-03-24","2026-04-02","2026-04-03","2026-05-01","2026-05-25","2026-06-15","2026-06-20","2026-07-09","2026-08-17","2026-10-12","2026-11-23","2026-12-08","2026-12-25"];
-const DIAS_ALERTA = 7;
-function fechaISO(d){ return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); }
-// Cuenta dias habiles (lunes a viernes, sin feriados) DESPUES de la fecha de aviso, hasta hoy inclusive
-function diasHabilesDesde(iso, hoy){
-  if(!iso) return 0;
-  const p = iso.split("-").map(Number);
-  if(p.length !== 3 || p.some(isNaN)) return 0;
-  const d = new Date(p[0], p[1]-1, p[2]);
-  const tope = new Date(hoy || new Date()); tope.setHours(0,0,0,0);
-  let n = 0;
-  for(;;){
-    d.setDate(d.getDate() + 1);
-    if(d > tope) break;
-    const w = d.getDay();
-    if(w !== 0 && w !== 6 && !FERIADOS_ARG.includes(fechaISO(d))) n++;
-  }
-  return n;
-}
-function venceAviso(f){ return f.avisado === "si" && f.hon !== "abono" && !!f.fechaAviso && diasHabilesDesde(f.fechaAviso) >= DIAS_ALERTA; }
-function avisoBloque(f){
-  if(f.avisado !== "si") return "";
-  let extra = "";
-  if(f.hon !== "abono" && f.fechaAviso){
-    const n = diasHabilesDesde(f.fechaAviso);
-    extra = venceAviso(f) ? `<span class="alerta-dias">⏰ ${n} días hábiles sin pago</span>` : `<span class="muted">${n} de ${DIAS_ALERTA} días hábiles</span>`;
-  }
-  return `<div class="aviso-fecha">avisado <input type="date" data-f="fechaAviso" value="${esc(f.fechaAviso || "")}">${extra}</div>`;
-}
-function bannerVencidos(c){
-  const n = (c.filas || []).filter(f => !f.borrado && venceAviso(f)).length;
-  return n ? `<div class="alerta-banner">⏰ ${n} actor${n === 1 ? "" : "es"} con ${DIAS_ALERTA} días hábiles avisados sin pago</div>` : "";
-}
 function renderArchivo(){
   const cont = document.getElementById("tabArchivo");
   // se guarda la posicion de la pagina y de cada tabla para que nada "salte" al redibujar
@@ -2353,23 +2327,33 @@ function _renderArchivo(cont){
     if(!cerrado){
       lista.forEach(c => {
         const claveOrden = f => stripAccents(f.name || "").toUpperCase().replace(/[^A-Z ,]/g, "").trim();
-        const filas = c.filas.map((f,i) => ({f,i})).sort((a,b) => claveOrden(a.f).localeCompare(claveOrden(b.f), "es")).filter(({f}) => !f.borrado).filter(({f}) => !q ||
+        let filas = c.filas.map((f,i) => ({f,i})).sort((a,b) => claveOrden(a.f).localeCompare(claveOrden(b.f), "es")).filter(({f}) => !f.borrado).filter(({f}) => !q ||
           stripAccents(f.name||"").toUpperCase().includes(q) || (f.docnum||"").includes(q));
         if(q && !filas.length) return;
         const t = totalesComp(c);
+        const fa = archFiltro[c.id] || "todos";
+        const esAb = ({f, i}) => ((BORRADORES.get(c.id + "|" + i) || f).hon === "abono");
+        const nAb = filas.filter(esAb).length, nNo = filas.length - nAb;
+        if(fa !== "todos"){
+          const ab = filas.filter(esAb), no = filas.filter(x => !esAb(x));
+          filas = fa === "abonaron" ? ab : no;
+        }
         const abierto = archAbiertos.has(c.id) || !!q;
         const exp = archExpandida === c.id;
         html += `<div class="arch-comp${exp ? " expandida" : ""}" data-id="${esc(c.id)}">
           <button class="btn-expandir" data-expandir="${esc(c.id)}" title="${exp ? "Volver al tamaño normal (Esc)" : "Ver la complementaria a pantalla completa"}">${exp ? "🗗 REDUCIR" : "⛶ EXPANDIR"}</button>
-          ${bannerVencidos(c)}
           <div class="arch-comp-h">
             <button class="ver-btn${abierto ? " abierto" : ""}" data-toggle="${esc(c.id)}">${abierto ? "▾ OCULTAR COMPLEMENTARIA" : "▸ VER COMPLEMENTARIA"}</button>
             <button class="btn-notif" data-notif="${esc(c.id)}" title="Manda el aviso por WhatsApp, uno por uno, a todos los celulares verificados (en verde)">📲 NOTIFICAR CLIENTES POR WHATSAPP${(() => { const n = notifResumen(c); return n.total ? ` <span class="notif-cnt">${n.enviados}/${n.total}</span>` : ""; })()}</button>
             <b class="arch-titulo">Complementaria ${esc(c.complementaria || "sin número")}</b>
             <span>Fecha de pago: <input class="arch-fecha" data-fecha="${esc(c.id)}" value="${esc(c.fechaPago)}"></span>
             <span class="muted">${filasVivas(c).length} clientes · ${t.abonados} abonaron</span>
-            <span class="arch-pend" data-pend="${esc(c.id)}">Pendiente 15%: <b>${fmtMoney(t.p15)}</b> · 20%: <b>${fmtMoney(t.p20)}</b></span>
             <span class="row" style="gap:6px;">
+              <span class="fa-wrap">
+                <button class="secondary mini${fa==="todos"?" fa-on":""}" data-fa="todos" data-id="${esc(c.id)}">TODOS</button>
+                <button class="fa-chip si${fa==="abonaron"?" on":""}" data-fa="abonaron" data-id="${esc(c.id)}">CLIENTES QUE ABONARON<b>${nAb}</b></button>
+                <button class="fa-chip no${fa==="no"?" on":""}" data-fa="no" data-id="${esc(c.id)}">CLIENTES QUE NO ABONARON<b>${nNo}</b></button>
+              </span>
               ${pendientesDe(c.id) ? `<button class="mini btn-guardar-todo" data-guardartodo="${esc(c.id)}">💾 GUARDAR TODOS LOS CAMBIOS</button>` : ""}
               <button class="secondary mini" data-pdf="${esc(c.id)}">⬇ DESCARGAR PDF</button>
               <button class="mini btn-nuevos" data-nuevos="${esc(c.id)}" title="Elegí el PDF de la Caja de esta complementaria: se suman solo los actores que falten, sin tocar lo editado">➕ AGREGAR ACTORES NUEVOS</button>
@@ -2381,14 +2365,18 @@ function _renderArchivo(cont){
             <th>#</th><th>DNI</th><th>ACTOR</th><th>Teléfono</th><th>Carátula</th><th>Beneficio</th>
             <th class="num">Bruto</th><th class="num">Descuentos</th><th class="num">Neto</th><th class="num">15%</th><th class="num">20%</th>
             <th>Honorarios</th><th>Liquidación contador</th><th>Comentarios</th><th></th></tr></thead><tbody>`;
+          let ultimoGrupo = null;
           filas.forEach(({f: fGuardada, i}) => {
+            if(fa !== "todos"){
+              const g = esAb({f: fGuardada, i}) ? "abonaron" : "no";
+              if(g !== ultimoGrupo){ ultimoGrupo = g; html += `<tr class="arch-grupo ${g}"><td colspan="15">${g === "abonaron" ? "CLIENTES QUE ABONARON" : "CLIENTES QUE NO ABONARON"}</td></tr>`; }
+            }
             const borrador = BORRADORES.get(c.id + "|" + i);
             const f = borrador || fGuardada;
             const pag = (f.hon === "abono" ? " pagado" : "") + (f.rep ? " repartido" : "");
             html += `<tr class="arch-fila${pag}${borrador ? " sin-guardar" : ""}" data-id="${esc(c.id)}" data-i="${i}">
               <td class="num col-num">
                 <label class="chk avisado${f.avisado === "si" ? " on" : ""}"><input type="checkbox" data-chk="avisado" data-v="si" ${f.avisado === "si" ? "checked" : ""}> ${f.avisado === "si" ? "CLIENTE AVISADO" : "CLIENTE SIN AVISAR"}</label>
-                ${avisoBloque(f)}
                 ${(f.nuevo || f.dudoso) ? `<div class="num-badges">${f.nuevo ? '<span class="bdg-nuevo">NUEVO</span>' : ''}${f.dudoso ? '<button class="verif-btn" data-esclient="1" title="Tocá si ya verificaste que es tu cliente: se quita el VERIFICAR">VERIFICAR ✓</button>' : ''}</div>` : ""}
                 <div class="num-fila"><div class="num-grande">${filas.findIndex(x => x.i === i) + 1}</div>
                 <div class="num-btns"><button class="btn-compartir" data-compartir="1" title="Genera un PDF con la liquidación para mandarle al cliente">TOCAR PARA COMPARTIR AL CLIENTE</button>
@@ -2404,8 +2392,8 @@ function _renderArchivo(cont){
               <td class="num"><input data-f="bruto" value="${(f.bruto||0).toFixed(2)}" style="width:88px;text-align:right;"></td>
               <td class="num"><input data-f="desc" value="${(f.desc||0).toFixed(2)}" style="width:88px;text-align:right;"></td>
               <td class="num"><input data-f="neto" value="${(f.neto||0).toFixed(2)}" style="width:88px;text-align:right;"></td>
-              <td class="num">${fmtMoney((f.bruto||0)*0.15)}</td>
-              <td class="num">${fmtMoney((f.bruto||0)*0.20)}</td>
+              <td class="num"><label class="pct-sel${(f.pct||20)===15?" on":""}"><input type="radio" name="pct-${c.id.replace(/\W/g,"")}-${i}" data-pct="15" ${(f.pct||20)===15?"checked":""}> ${fmtMoney((f.bruto||0)*0.15)}</label></td>
+              <td class="num"><label class="pct-sel${(f.pct||20)===20?" on":""}"><input type="radio" name="pct-${c.id.replace(/\W/g,"")}-${i}" data-pct="20" ${(f.pct||20)===20?"checked":""}> ${fmtMoney((f.bruto||0)*0.20)}</label></td>
               <td class="estado">
                 <label class="chk ok"><input type="checkbox" data-chk="hon" data-v="abono" ${f.hon==="abono"?"checked":""}> ABONÓ HONORARIOS</label>
                 <label class="chk no"><input type="checkbox" data-chk="hon" data-v="nopago" ${f.hon==="nopago"?"checked":""}> NO ABONÓ HONORARIOS</label>
@@ -2521,6 +2509,7 @@ function conectarArchivo(cont){
     inp.click();
   }));
   cont.querySelectorAll("[data-notif]").forEach(btn => btn.addEventListener("click", () => abrirNotificar(btn.dataset.notif)));
+  cont.querySelectorAll("[data-fa]").forEach(btn => btn.addEventListener("click", () => { archFiltro[btn.dataset.id] = btn.dataset.fa; renderArchivo(); }));
   cont.querySelectorAll("[data-delcomp]").forEach(btn => btn.addEventListener("click", async () => {
     const c = ARCHIVO[btn.dataset.delcomp];
     const n = filasVivas(c).length;
@@ -2600,20 +2589,6 @@ function conectarArchivo(cont){
     tr.querySelectorAll("[data-chk]").forEach(chk => chk.addEventListener("change", () => {
       const f = borrador(), k = chk.dataset.chk;
       f[k] = chk.checked ? chk.dataset.v : "";   // las dos opciones de cada grupo se excluyen entre si
-      if(k === "avisado") f.fechaAviso = chk.checked ? (f.fechaAviso || fechaISO(new Date())) : "";
-      renderArchivo();
-    }));
-    tr.querySelectorAll("[data-elegir]").forEach(b => b.addEventListener("click", e => {
-      e.preventDefault(); e.stopPropagation();
-      const f = borrador(), j = +b.dataset.elegir;
-      if(!f.caratulaOriginal) f.caratulaOriginal = f.caratula || "";   // guarda la lista completa para poder restaurarla
-      f.caratula = listaJuicios(f)[j] || "";                            // queda solo el juicio elegido (se puede cambiar)
-      renderArchivo();
-    }));
-    tr.querySelectorAll("[data-restaurar]").forEach(b => b.addEventListener("click", e => {
-      e.preventDefault(); e.stopPropagation();
-      const f = borrador();
-      f.caratula = f.caratulaOriginal || ""; delete f.caratulaOriginal;
       renderArchivo();
     }));
     tr.querySelector("[data-recibo]").addEventListener("click", () => abrirRecibo(c, BORRADORES.get(clave) || c.filas[i], clave));
@@ -2630,7 +2605,12 @@ function conectarArchivo(cont){
       btn.textContent = ok ? "✓ COPIADO" : "NO SE PUDO COPIAR";
       setTimeout(() => { btn.textContent = previo; }, 2000);
     });
-    tr.querySelector("[data-compartir]").addEventListener("click", () => abrirCompartir(c, BORRADORES.get(clave) || c.filas[i]));
+    tr.querySelector("[data-compartir]").addEventListener("click", () => abrirCompartir(c, BORRADORES.get(clave) || c.filas[i], clave));
+    tr.querySelectorAll("[data-pct]").forEach(rd => rd.addEventListener("change", () => {
+      const b = borrador(); b.pct = +rd.dataset.pct;
+      b.honRecibo = Math.round((b.bruto || 0) * b.pct / 100);   // se guarda con el porcentaje elegido (sin abrir el recibo)
+      renderArchivo();
+    }));
     tr.querySelector("[data-guardarfila]").addEventListener("click", () => {
       if(BORRADORES.has(clave)){
         c.filas[i] = Object.assign(BORRADORES.get(clave), { mod: ahoraMs(), nuevo: false }); BORRADORES.delete(clave);
@@ -2719,12 +2699,12 @@ function lineaJustificada(doc, linea, x, y, ancho, justificar){
 function textoJustificado(doc, lineas, x, y, ancho, interlineado){
   lineas.forEach((l, i) => lineaJustificada(doc, l, x, y + i * interlineado, ancho, i < lineas.length - 1));
 }
-function generarPDFCliente(c, f, pct, jui){
+function generarPDFCliente(c, f, pct, jui, transf){
   jui = jui || {};
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({orientation: "portrait", unit: "pt", format: "a4"});
   const W = doc.internal.pageSize.getWidth(), M = 50;
-  const bruto = f.bruto || 0, desc = f.desc || 0, neto = f.neto || 0, hon = bruto * pct / 100;
+  const bruto = f.bruto || 0, desc = f.desc || 0, neto = f.neto || 0, hon = bruto * pct / 100, recargo = transf ? hon * RECARGO_TRANSF : 0;
   // encabezado
   doc.setFillColor(30,58,95); doc.rect(0, 0, W, 80, "F");
   doc.setTextColor(255,255,255); doc.setFont(undefined, "bold"); doc.setFontSize(17);
@@ -2754,21 +2734,25 @@ function generarPDFCliente(c, f, pct, jui){
     ["Importe bruto", fmtMoney(bruto)],
     ["Descuentos personales", "- " + fmtMoney(desc)],
     ["Importe neto (depositado en su cuenta)", fmtMoney(neto)],
-    [`Honorarios profesionales (${pct}% del importe bruto)`, fmtMoney(hon)],
+    [`Honorarios profesionales (${pct}% del importe bruto)`, fmtMoney(transf === "oculto" ? hon + recargo : hon)],
   ];
+  if(transf === "detalle"){
+    filas.push(["Recargo gestoría por transferencia (3,25%)", fmtMoney(recargo)]);
+    filas.push(["TOTAL honorarios con transferencia", fmtMoney(hon + recargo)]);
+  }
   doc.autoTable({
     startY: doc.lastAutoTable.finalY + 16, margin: {left: M, right: M}, theme: "grid",
     head: [["Concepto", "Importe"]], body: filas,
     headStyles: {fillColor: [30,58,95], textColor: 255, fontStyle: "bold", fontSize: 11.5, halign: "left"},
-    styles: {fontSize: 12.5, cellPadding: 7, lineColor: [213,220,230], lineWidth: 0.6, textColor: [30,41,59]},
+    styles: {fontSize: 12.5, cellPadding: 5, lineColor: [213,220,230], lineWidth: 0.6, textColor: [30,41,59]},
     columnStyles: {1: {halign: "right", cellWidth: 150, fontStyle: "bold"}},
     didParseCell: d => {
       if(d.section === "head" && d.column.index === 1) d.cell.styles.halign = "right";
-      if(d.section === "body" && d.row.index === 3){ d.cell.styles.fillColor = [254,243,199]; d.cell.styles.fontStyle = "bold"; d.cell.styles.fontSize = 13.5; d.cell.styles.textColor = [120,53,15]; }
+      if(d.section === "body" && d.row.index === filas.length - 1){ d.cell.styles.fillColor = [254,243,199]; d.cell.styles.fontStyle = "bold"; d.cell.styles.fontSize = 13.5; d.cell.styles.textColor = [120,53,15]; }
       if(d.section === "body" && d.row.index === 2){ d.cell.styles.fillColor = [236,253,243]; }
     }
   });
-  let y = doc.lastAutoTable.finalY + 22;
+  let y = doc.lastAutoTable.finalY + 14;
   doc.setFont(undefined, "normal"); doc.setFontSize(12.5); doc.setTextColor(71,85,105);
   const nota = doc.splitTextToSize(`Los honorarios profesionales corresponden al ${pct}% del importe bruto liquidado por la Caja de Retiros, Jubilaciones y Pensiones de la Policía Federal. Una vez corroborado el depósito, le solicitamos comunicarse con nuestras oficinas.`, W - 2*M);
   textoJustificado(doc, nota, M, y, W - 2*M, 14.4);
@@ -2790,23 +2774,23 @@ function generarPDFCliente(c, f, pct, jui){
     y += nota.length * 14.4 - 6;
   }
   // ---- Cuadro: formas de pago de los honorarios ----
-  y += 12;
+  y += 8;
   // cada punto: tramos de texto [texto, negrita]
   const PAGOS = [
     [["En nuestro Estudio Jurídico:", 1], [" para efectuar el pago correspondiente a nuestros honorarios profesionales, podrá acercarse a nuestras oficinas ubicadas en la calle ", 0], ["Av. Alicia Moreau de Justo N° 740, Piso 1, Of. 9, C.A.B.A. (CP 1107)", 1], [", de lunes a jueves en el horario de 10:00 a 20:00 hs.", 0]],
     [["En la Mutual de Suboficiales de la PFA (Sede Central):", 1], [" asimismo, nos encuentra en la sede ubicada en la calle ", 0], ["Beauchef 1560, C.A.B.A.", 1], [", los días miércoles en el horario de 15:00 a 17:00 hs.", 0]],
-    [["Por transferencia bancaria:", 1], [" en caso de requerir efectuar el pago mediante transferencia bancaria, deberá solicitarnos oportunamente los datos de una cuenta a sus efectos, la cual podrá adicionar un recargo según corresponda.", 0]],
+    [["Por transferencia bancaria:", 1], [transf === "detalle" ? " para pagar mediante transferencia bancaria, deberá solicitarnos oportunamente los datos de una cuenta a sus efectos. Este medio de pago incluye un recargo de gestoría del 3,25% sobre los honorarios." : " en caso de requerir efectuar el pago mediante transferencia bancaria, deberá solicitarnos oportunamente los datos de una cuenta a sus efectos, la cual podrá adicionar un recargo según corresponda.", 0]],
   ];
-  const FS = 11.5, LH = FS * 1.22, anchoTxt = W - 2*M - 40;
+  const FS = 10.5, LH = FS * 1.18, anchoTxt = W - 2*M - 40;
   const bloques = PAGOS.map(segs => renglonesRicos(doc, segs, anchoTxt, FS));
-  const altoPagos = 36 + bloques.reduce((t, r) => t + r.length * LH + 6, 0);
+  const altoPagos = 32 + bloques.reduce((t, r) => t + r.length * LH + 6, 0);
   if(y + altoPagos > doc.internal.pageSize.getHeight() - 22){ doc.addPage(); y = 50; }
   doc.setFillColor(239,246,255); doc.setDrawColor(30,58,95); doc.setLineWidth(1.4);
   doc.roundedRect(M, y, W - 2*M, altoPagos, 6, 6, "FD");
   doc.setFillColor(30,58,95); doc.rect(M, y, 6, altoPagos, "F");
   doc.setTextColor(30,58,95); doc.setFont(undefined, "bold"); doc.setFontSize(13.5);
   doc.text("PAGO DE HONORARIOS PROFESIONALES:", M + 18, y + 22);
-  let yy = y + 42;
+  let yy = y + 36;
   bloques.forEach(renglones => {
     doc.setFontSize(FS); doc.setTextColor(30,41,59);
     doc.setFont(undefined, "bold"); doc.text("•", M + 20, yy);
@@ -2822,10 +2806,18 @@ function generarPDFCliente(c, f, pct, jui){
 const TEXTO_CONTADOR = "Tenga presente que la liquidación del juicio presenta errores, debido a que la Caja de Retiros omitió incorporar la totalidad de los rubros correspondientes. Por este motivo, le sugerimos realizar una reliquidación con nuestro contador especialista. El costo de sus honorarios es de $150.000, lo cual incluye el nuevo cálculo y la actualización de los intereses.";
 
 // Por defecto: 20% e INFORMAR RELIQUIDACION CONTADOR
-function abrirCompartir(c, f){ abrirCompartirModal(c, f, true); }
-function abrirCompartirModal(c, f, conContador){
-  if(!juicioElegidoOk(f)) return;
-  let pct = 20;
+function abrirCompartir(c, f, clave){ abrirCompartirModal(c, f, true, clave); }
+const RECARGO_TRANSF = 0.0325;   // gestoria por transferencia: +3,25% sobre los honorarios
+function abrirCompartirModal(c, f, conContador, clave){
+  let pct = f.pct === 15 ? 15 : 20;      // arranca con el porcentaje ya elegido en la fila
+  let transf = null;     // null = sin transferencia · "detalle" = recargo visible · "oculto" = sumado sin mostrar
+  // el 15/20% elegido queda en el borrador de la fila: lo leen el recibo y el PDF
+  const guardarPct = p => {
+    if(!clave) return;
+    if(!BORRADORES.has(clave)) BORRADORES.set(clave, JSON.parse(JSON.stringify(c.filas[+clave.split("|")[1]])));
+    const b = BORRADORES.get(clave); b.pct = p; b.honRecibo = Math.round((b.bruto || 0) * p / 100);
+    f = b; renderArchivo();
+  };
   const caratulas = (f.caratula || "").split("||").map(x => x.trim()).filter(Boolean).map(leerCaratula);
   let sel = 0;
   let jui = caratulas[0] ? {...caratulas[0]} : {decreto: "", juicio: "", juzgado: "", expte: ""};
@@ -2835,6 +2827,7 @@ function abrirCompartirModal(c, f, conContador){
   m.className = "modal-fondo";
   const pintar = () => {
     const bruto = f.bruto || 0;
+    const honBase = bruto * pct / 100, honTot = transf ? honBase * (1 + RECARGO_TRANSF) : honBase;
     m.innerHTML = `<div class="modal" style="width:520px;">
       <h3>📄 Para compartir al cliente</h3>
       <div class="comp-datos">
@@ -2858,8 +2851,16 @@ function abrirCompartirModal(c, f, conContador){
       </div>
       <div class="comp-pct">
         <div class="comp-pct-t">Honorarios profesionales (sobre el importe bruto):</div>
-        <label class="${pct===15?"sel":""}"><input type="radio" name="pct" value="15" ${pct===15?"checked":""}> <b>15%</b> = ${fmtMoney(bruto*0.15)}</label>
-        <label class="${pct===20?"sel":""}"><input type="radio" name="pct" value="20" ${pct===20?"checked":""}> <b>20%</b> = ${fmtMoney(bruto*0.20)}</label>
+        <label class="${pct===15?"sel":""}"><input type="checkbox" data-pct="15" ${pct===15?"checked":""}> <b>15%</b> = ${fmtMoney(bruto*0.15)}</label>
+        <label class="${pct===20?"sel":""}"><input type="checkbox" data-pct="20" ${pct===20?"checked":""}> <b>20%</b> = ${fmtMoney(bruto*0.20)}</label>
+      </div>
+      <div class="comp-transf ${transf?"si":""}">
+        <label class="${transf?"sel":""}"><input type="checkbox" data-transf="1" ${transf?"checked":""}> <b>PAGO POR TRANSFERENCIA</b> <span>(+ 3,25% gestoría)</span></label>
+        ${transf ? `<div class="comp-transf-txt">Honorarios ${fmtMoney(honBase)} + 3,25% gestoría = <b>TOTAL ${fmtMoney(honTot)}</b></div>
+        <div class="comp-transf-opc">
+          <label class="${transf==="detalle"?"sel":""}"><input type="checkbox" data-tdet="detalle" ${transf==="detalle"?"checked":""}> Mostrar el recargo en el detalle</label>
+          <label class="${transf==="oculto"?"sel":""}"><input type="checkbox" data-tdet="oculto" ${transf==="oculto"?"checked":""}> No mostrarlo (sumado al total)</label>
+        </div>` : ""}
       </div>
       <div class="comp-cont ${jui.contador ? "si" : ""}">
         <label class="${jui.contador ? "sel" : ""}"><input type="checkbox" data-cont="si" ${jui.contador ? "checked" : ""}> <b>INFORMAR RELIQUIDACION CONTADOR</b></label>
@@ -2875,7 +2876,9 @@ function abrirCompartirModal(c, f, conContador){
       <div id="copiaMsg" class="copia-msg"></div>
       <div class="muted" style="font-size:12px; margin-top:8px;">${tel ? "WhatsApp del cliente: " + esc(tel.a.display) : "El cliente no tiene celular cargado: vas a poder elegir el contacto en WhatsApp."}</div>
     </div>`;
-    m.querySelectorAll('input[name="pct"]').forEach(r => r.addEventListener("change", () => { pct = +r.value; pintar(); }));
+    m.querySelectorAll('input[data-pct]').forEach(r => r.addEventListener("change", () => { pct = +r.dataset.pct; guardarPct(pct); pintar(); }));
+    m.querySelector('input[data-transf]').addEventListener("change", e => { transf = e.target.checked ? "detalle" : null; pintar(); });
+    m.querySelectorAll('input[data-tdet]').forEach(r => r.addEventListener("change", () => { transf = r.dataset.tdet; pintar(); }));
     m.querySelectorAll('input[name="jui"]').forEach(r => r.addEventListener("change", () => { sel = +r.value; jui = {...caratulas[sel], contador: jui.contador}; pintar(); }));
     // las dos casillas se excluyen entre si
     m.querySelectorAll('input[data-cont]').forEach(r => r.addEventListener("change", () => {
@@ -2885,7 +2888,7 @@ function abrirCompartirModal(c, f, conContador){
     m.querySelector('[data-a="copiar"]').addEventListener("click", () => {
       const msg = m.querySelector("#copiaMsg"), btn = m.querySelector('[data-a="copiar"]');
       btn.disabled = true; btn.textContent = "Copiando…"; msg.textContent = "";
-      const {blob, archivo} = generarPDFCliente(c, f, pct, jui);
+      const {blob, archivo} = generarPDFCliente(c, f, pct, jui, transf);
       const pngPromesa = pdfAImagen(blob);
       const listo = ok => {
         btn.disabled = false; btn.textContent = "📋 COPIAR";
@@ -2904,9 +2907,9 @@ function abrirCompartirModal(c, f, conContador){
         pngPromesa.then(png => { bajarBlob(png, archivo.replace(/\.pdf$/, ".png")); listo(false); });
       }
     });
-    m.querySelector('[data-a="bajar"]').addEventListener("click", () => { const {blob, archivo} = generarPDFCliente(c, f, pct, jui); bajarBlob(blob, archivo); });
+    m.querySelector('[data-a="bajar"]').addEventListener("click", () => { const {blob, archivo} = generarPDFCliente(c, f, pct, jui, transf); bajarBlob(blob, archivo); });
     m.querySelector('[data-a="wa"]').addEventListener("click", async () => {
-      const {blob, archivo} = generarPDFCliente(c, f, pct, jui);
+      const {blob, archivo} = generarPDFCliente(c, f, pct, jui, transf);
       const file = new File([blob], archivo, {type: "application/pdf"});
       const texto = `Estimado/a ${nombreLindo(f.name)}: le enviamos el detalle de la liquidación de su juicio` +
         (jui.juicio ? ` "${jui.juicio}"` : "") + (jui.expte ? ` (Expte. N° ${jui.expte})` : "") +
@@ -3110,7 +3113,6 @@ const GASTOS_CONTABLE = 150000;
 const DECRETOS_RECIBO = ["DECRETO 380/17", "DECRETO 2140/13", "DECRETO 2744/93"];
 function claveDecreto(t){ const m = /(2140|380|2744)/.exec(t || ""); return m ? m[1] : ""; }
 function abrirRecibo(c, f, clave){
-  if(!juicioElegidoOk(f)) return;
   const cars = (f.caratula || "").split("||").map(x => x.trim()).filter(Boolean).map(leerCaratula);
   const car0 = cars.find(k => claveDecreto(k.decreto)) || cars[0] || {};
   const dec0 = DECRETOS_RECIBO.find(x => claveDecreto(x) === claveDecreto(car0.decreto)) || "DECRETO 2140/13";
@@ -3133,11 +3135,11 @@ function abrirRecibo(c, f, clave){
           <label style="flex:1;">DNI<input data-r="dni" value="${esc(d.dni)}"></label>
           <label style="flex:1;">Fecha<input data-r="fecha" value="${esc(d.fecha)}"></label>
         </div>
-        <label>Decreto abonado<select data-dec="1" class="recibo-sel" ${f.caratulaOriginal ? "disabled" : ""}>${DECRETOS_RECIBO.filter(x => !f.caratulaOriginal || x === d.decreto).map(x => `<option ${x === d.decreto ? "selected" : ""}>${x}</option>`).join("")}</select></label>
+        <label>Decreto abonado<select data-dec="1" class="recibo-sel">${DECRETOS_RECIBO.map(x => `<option ${x === d.decreto ? "selected" : ""}>${x}</option>`).join("")}</select></label>
         <div class="comp-pct recibo-pct">
           <div class="comp-pct-t">Honorarios (sobre el importe bruto de ${fmtMoney(f.bruto || 0)}):</div>
-          <label class="sel"><input type="radio" name="recPct" value="15"> <b>15%</b> = ${fmtMoney((f.bruto||0)*0.15)}</label>
-          <label class="sel"><input type="radio" name="recPct" value="20" checked> <b>20%</b> = ${fmtMoney((f.bruto||0)*0.20)}</label>
+          <label class="sel"><input type="radio" name="recPct" value="15" ${f.pct===15?"checked":""}> <b>15%</b> = ${fmtMoney((f.bruto||0)*0.15)}</label>
+          <label class="sel"><input type="radio" name="recPct" value="20" ${f.pct===15?"":"checked"}> <b>20%</b> = ${fmtMoney((f.bruto||0)*0.20)}</label>
         </div>
         <div class="row" style="gap:8px;">
           <label style="flex:1;">Importe ($)<input data-r="importe" value="${esc(d.importe)}"></label>
@@ -3234,8 +3236,7 @@ function abrirRecibo(c, f, clave){
 const REP_RESPONSABLE = {1: "Guillermo", 2: "Guillermo", 6: "Guillermo", 3: "Roberta y Damián", 4: "Roberta y Damián", 7: "Roberta y Damián", 10: "Roberta y Damián"};
 const REP_GABRIEL = [5, 8, 9];
 function juzgadoRep(f){
-  // si hay un juicio elegido, manda su juzgado; si no, el juzgado cargado a mano
-  if(!f.caratulaOriginal && f.juzgado) return +f.juzgado;
+  if(f.juzgado) return +f.juzgado;
   for(const t of (f.caratula || "").split("||").map(x => x.trim()).filter(Boolean)){
     const m = /(\d+)\s*$/.exec(leerCaratula(t).juzgado || "");
     if(m) return +m[1];
@@ -3287,8 +3288,9 @@ function abrirReparto(c, f, clave){
         <div class="rep-card neto"><div class="lbl">Neto a repartir</div><div class="val">${fmtMoney(r.neto)}</div></div>
       </div>
       <label class="rep-jz"><span>Juzgado</span>
-        <select data-jz ${f.caratulaOriginal ? "disabled" : ""}>${["", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => `<option value="${n}" ${r.j === n ? "selected" : ""}>${n || "—"}</option>`).join("")}</select>
+        <select data-jz>${["", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => `<option value="${n}" ${r.j === n ? "selected" : ""}>${n || "—"}</option>`).join("")}</select>
       </label>
+      ${f.cont === "pago" ? `<div class="rep-gastos">SEPARAR GASTOS ESTUDIO CONTABLE $${GASTOS_CONTABLE.toLocaleString("es-AR")}<small>(no incluidos en el reparto)</small></div>` : ""}
       ${r.filas ? `<table class="rep-tab"><thead><tr><th>Integrante</th><th class="num">%</th><th class="num">Monto</th></tr></thead><tbody>${filasHtml}</tbody></table>`
                 : `<div class="recibo-hint no">⚠️ Falta el juzgado: elegilo arriba para ver el reparto.</div>`}
       <div class="actions rep-actions"><button class="rep-cerrar" data-a="cerrar">CERRAR</button></div>
@@ -3349,6 +3351,8 @@ function abrirReparto(c, f, clave){
     .rep-actions{justify-content:flex-end}
     .rep-cerrar{background:#1e3a5f;color:#fff;border:none;border-radius:10px;padding:10px 22px;font:800 13px "IBM Plex Sans",system-ui,sans-serif;letter-spacing:.06em;cursor:pointer;box-shadow:0 4px 12px rgba(30,58,95,.3)}
     .rep-cerrar:hover{background:#2563eb}
+    .rep-gastos{background:#9d174d;color:#fff;border-radius:12px;padding:12px 14px;font:800 14px "IBM Plex Sans",system-ui,sans-serif;letter-spacing:.04em;text-transform:uppercase;box-shadow:0 4px 12px rgba(157,23,77,.3)}
+    .rep-gastos small{display:block;text-transform:none;font-weight:600;letter-spacing:0;font-size:12px;margin-top:3px;opacity:.92}
     @media (max-width:480px){ .rep-cards{grid-template-columns:1fr} .rep-head h3{font-size:19px} }`;
   document.head.appendChild(s);
 })();
@@ -3358,35 +3362,14 @@ function abrirReparto(c, f, clave){
 // El número y el año salen de la carátula (2140 / 380). En la extensión, el pedido lo
 // toma pjn.js dentro del Sistema de Consultas Web y abre el expediente solo.
 // =====================================================================
-function juiciosDeFila(f){ return (f.caratula || "").split("||").map(x => x.trim()).filter(Boolean); }
-// Si el actor tiene varios juicios, hay que elegir uno antes de seguir (recibo, liquidacion).
-function juicioElegidoOk(f){
-  const n = juiciosDeFila(f).length;
-  if(n > 1){ alert(`Este actor tiene ${n} juicios cargados.\nPrimero elegí el que corresponde (botón ELEGIR ESTE) y después seguí con el recibo o la liquidación.`); return false; }
-  return true;
-}
-function listaJuicios(f){ return juiciosDeFila({caratula: f.caratulaOriginal || f.caratula}); }
 function pjnBotones(f){
-  const todas = listaJuicios(f);
-  if(!todas.length) return "";
-  const hayVarias = todas.length > 1, elegido = !!f.caratulaOriginal;
-  const opciones = todas.map((t, j) => {
+  const items = (f.caratula || "").split("||").map(x => x.trim()).filter(Boolean).map(t => {
     const k = leerCaratula(t);
     const m = /^(\d+)\/(\d{2}|\d{4})$/.exec(k.expte || "");
-    const dec = (k.decreto || "").replace(/^decreto\s*/i, "");
-    const txt = (dec ? "DTO. " + dec + " " : "") + (m ? "Expt. n° " + m[1] + "/" + m[2] : (k.juicio || t));
-    const pjn = m
-      ? `<button type="button" class="btn-pjn" data-pjn-numero="${esc(m[1])}" data-pjn-anio="${esc(m[2].length === 2 ? "20" + m[2] : m[2])}" title="Abrir el expediente en el PJN">${esc(txt)}</button>`
-      : `<span class="btn-pjn-no">${esc(txt)}</span>`;
-    const esEste = elegido && f.caratula === t;
-    const eleg = hayVarias ? `<button type="button" class="btn-elegir${esEste ? " on" : ""}" data-elegir="${j}" title="Trabajar solo con este juicio: los demás se quitan">${esEste ? "✓ ELEGIDO" : "ELEGIR ESTE"}</button>` : "";
-    const apagado = elegido && !esEste ? " jui-descartado" : "";
-    return `<div class="jui-opcion${apagado}">${eleg}${pjn}</div>`;
-  }).join("");
-  const aviso = hayVarias && !elegido ? `<span class="jui-aviso">⚠ Elegí el juicio que corresponde</span>`
-    : (elegido ? `<span class="jui-ok">✓ Juicio elegido</span>` : "");
-  const restaurar = elegido ? `<button type="button" class="btn-restaurar" data-restaurar="1">↩ Restaurar juicios quitados</button>` : "";
-  return `<div class="pjn-row">${aviso}<span class="pjn-hint">Tocar para abrir expediente</span>${opciones}${restaurar}</div>`;
+    return m ? {numero: m[1], anio: m[2].length === 2 ? "20" + m[2] : m[2], dec: (k.decreto || "").replace(/^decreto\s*/i, "")} : null;
+  }).filter(Boolean);
+  if(!items.length) return "";
+  return `<div class="pjn-row"><span class="pjn-hint">Tocar para abrir expediente</span>${items.map(x => `<button type="button" class="btn-pjn" data-pjn-numero="${esc(x.numero)}" data-pjn-anio="${esc(x.anio)}" title="Abrir el expediente en el PJN">${x.dec ? "DTO. " + esc(x.dec) + " " : ""}Expt. n° ${esc(x.numero)}/${esc(x.anio)}</button>`).join("")}</div>`;
 }
 function abrirExpedientePJN(numero, anio){
   if(!(typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id)){
@@ -3409,20 +3392,7 @@ document.addEventListener("click", e => {
     .pjn-row{display:flex;flex-direction:column;gap:6px;margin-top:6px;width:max-content;max-width:100%}
     .pjn-hint{font:700 10px "IBM Plex Sans",system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#2563eb}
     .btn-pjn{font:700 11px "IBM Plex Sans",system-ui,sans-serif;text-align:left;padding:6px 10px;border-radius:8px;cursor:pointer;background:linear-gradient(135deg,#eef3fa,#dbe7fd);color:#1e3a5f;border:1px solid #93c5fd;white-space:nowrap}
-    .btn-pjn:hover{background:linear-gradient(135deg,#dbe7fd,#bfdbfe);border-color:#2563eb}
-    .jui-opcion{display:flex;gap:6px;align-items:center;flex-wrap:wrap;transition:opacity .15s}
-    .jui-opcion.jui-descartado{opacity:.45;filter:grayscale(1)}
-    .jui-opcion.jui-descartado:hover{opacity:.9;filter:none}
-    .btn-elegir{font:800 10px "IBM Plex Sans",system-ui,sans-serif;padding:5px 8px;border-radius:6px;border:1px solid #15803d;background:#dcfce7;color:#15803d;cursor:pointer;white-space:nowrap}
-    .btn-elegir:hover{background:#15803d;color:#fff}
-    .btn-pjn-no{font:700 11px "IBM Plex Sans",system-ui,sans-serif;padding:6px 10px;border:1px dashed #cbd5e1;border-radius:8px;color:#64748b}
-    .jui-aviso{font:800 10.5px "IBM Plex Sans",system-ui,sans-serif;color:#b45309;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:4px 6px}
-    .jui-ok{font:800 10.5px "IBM Plex Sans",system-ui,sans-serif;color:#15803d;background:#dcfce7;border:1px solid #86efac;border-radius:6px;padding:4px 6px}
-    .btn-restaurar{font:700 10.5px "IBM Plex Sans",system-ui,sans-serif;background:transparent;border:1px dashed #64748b;color:#334155;border-radius:6px;padding:4px 8px;cursor:pointer}
-    .aviso-fecha{font-size:11px; color:#334155; margin:0 0 6px; display:flex; flex-direction:column; gap:3px; align-items:flex-start}
-    .aviso-fecha input{width:140px !important; background:#fff !important; border:1px solid #d5dce6 !important; border-radius:5px; padding:2px 4px !important; font-size:12px}
-    .alerta-dias{background:#fee2e2; color:#b91c1c; font-weight:800; border:2px solid #dc2626; border-radius:6px; padding:2px 6px}
-    .alerta-banner{background:#fef2f2; border:2px solid #dc2626; color:#b91c1c; font-weight:800; border-radius:10px; padding:8px 12px; margin:0 0 10px; font-size:13px}`;
+    .btn-pjn:hover{background:linear-gradient(135deg,#dbe7fd,#bfdbfe);border-color:#2563eb}`;
   document.head.appendChild(s);
 })();
 
@@ -3521,6 +3491,7 @@ function abrirNotificar(id){
 // =====================================================================
 // CLIENTES DEUDORES: todos los actores de las complementarias guardadas que no abonaron honorarios
 // =====================================================================
+const archFiltro = {};
 let deuFiltro = "todos", deuBusqueda = "", deuOrden = "nombre", comGuardado = "";
 function listaDeudores(){
   const grupos = new Map();
