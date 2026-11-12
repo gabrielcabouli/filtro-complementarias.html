@@ -2791,7 +2791,7 @@ function conectarArchivo(cont){
 // Interpreta una caratula tipo: (2140) JUZG. 7 SS. "AGUADO, RAMON ABELARDO Y O." 26765/2015-451
 function leerCaratula(txt){
   const t = (txt || "").trim();
-  const m = /^\(([^)]+)\)\s*JUZG\.?\s*(\d+)\s*S\.?S\.?\s*"([^"]+)"?\s*(.*)$/i.exec(t);
+  const m = /^\(([^)]+)\)\s*JUZG\.?\s*(\d+)\s*S\.?S\.?\s*["\u201C\u201D\u201E]([^"\u201C\u201D\u201E]+)["\u201C\u201D\u201E]?\s*(.*)$/i.exec(t);
   if(!m) return {decreto: "", juicio: t, juzgado: "", expte: "", texto: t};
   const cod = m[1].toUpperCase().replace(/\s+/g, "");
   let decreto = cod;
@@ -3293,7 +3293,7 @@ function abrirRecibo(c, f, clave){
           <label style="flex:1;">DNI<input data-r="dni" value="${esc(d.dni)}"></label>
           <label style="flex:1;">Fecha<input data-r="fecha" value="${esc(d.fecha)}"></label>
         </div>
-        <label>Decreto abonado<select data-dec="1" class="recibo-sel" ${f.caratulaOriginal ? "disabled" : ""}>${DECRETOS_RECIBO.filter(x => !f.caratulaOriginal || x === d.decreto).map(x => `<option ${x === d.decreto ? "selected" : ""}>${x}</option>`).join("")}</select></label>
+        <label>Decreto abonado<select data-dec="1" class="recibo-sel">${DECRETOS_RECIBO.map(x => `<option ${x === d.decreto ? "selected" : ""}>${x}</option>`).join("")}</select></label>
         <div class="comp-pct recibo-pct">
           <div class="comp-pct-t">Honorarios (sobre el importe bruto de ${fmtMoney(f.bruto || 0)}):</div>
           <label class="sel"><input type="radio" name="recPct" value="15"> <b>15%</b> = ${fmtMoney((f.bruto||0)*0.15)}</label>
