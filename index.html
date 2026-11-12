@@ -2386,7 +2386,7 @@ function segundoBloque(f){
     else estado = `<span class="muted">2° aviso ${fechaDMY(f.segundoAviso)} · mora desde el ${fechaDMY(sumarDias(f.segundoAviso, DIAS_MORA_2AVISO))}</span>`;
   }
   return `<div class="segundo-aviso">
-    ${ya ? `<label class="chk ok comun"><input type="checkbox" data-chk="comunico" data-v="si" ${f.comunico === "si" ? "checked" : ""}> SE COMUNICÓ AL ESTUDIO</label>` : ""}
+    <label class="chk ok comun"><input type="checkbox" data-chk="comunico" data-v="si" ${f.comunico === "si" ? "checked" : ""}> SE COMUNICÓ CON EL ESTUDIO</label>
     ${estado}</div>`;
 }
 
