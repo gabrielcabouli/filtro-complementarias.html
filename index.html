@@ -2266,6 +2266,22 @@ function guardarArchivo(){
   actualizarContadorArchivo();
 }
 let _trEstadoTxt = "";
+// Abre la solapa TRANSFERENCIAS AL ESTUDIO con el cliente de la fila ya cargado
+function abrirTransferenciaDesdeFila(compId, filaK){
+  document.querySelector('.tab[data-tab="tabTransf"]').click();
+  const c = ARCHIVO[compId]; const f = c && (c.filas || []).find(x => x._k === filaK && !x.borrado);
+  if(!f) return;
+  const g = id => document.getElementById(id);
+  g("trBuscar").value = f.name || "";
+  trActualizarOpciones();
+  const idx = trResultados.findIndex(r => r.c.id === compId && r.f._k === filaK);
+  if(idx < 0) return;
+  g("trVincular").value = String(idx);
+  g("trVincular").dispatchEvent(new Event("change"));
+  g("trMsg").style.color = "#1e3a5f";
+  g("trMsg").textContent = "Completá el integrante que recibe el dinero y registrá la transferencia.";
+  g("trForm").scrollIntoView({behavior: "smooth", block: "start"});
+}
 function marcarGuardado(ok){
   _trEstadoTxt = ok ? "✓ Guardado automáticamente " + new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}) : "⚠️ No se pudo guardar";
   const tr = document.getElementById("trEstado");
@@ -2382,9 +2398,11 @@ function marcarAbonoPorTransf(compId, k, on){
   if(on){
     if(f.hon !== "abono"){ cambios.hon = "abono"; cambios.honPorTransf = true; }
     if(!f.transfirio) cambios.transfirio = true;
+    if(f.modalidad !== "transferencia") cambios.modalidad = "transferencia";
   } else {
     if(!quedan && f.honPorTransf && !f.rep){ cambios.hon = ""; cambios.honPorTransf = false; }
     if(!quedan && f.transfirio) cambios.transfirio = false;
+    if(!quedan && f.modalidad === "transferencia") cambios.modalidad = "";
   }
   const cambia = Object.keys(cambios).length > 0;
   if(cambia){
@@ -2802,7 +2820,7 @@ function textoCuentaCliente(c){
   const avisoG = c.integrante === "GESTORIA" ? `IMPORTANTE: se informa que la Gestoría cobra el ${pctTxt}% por efectuar la transferencia.` : "";
   return ["Datos para transferencia",
     c.titular ? `Titular: ${c.titular}` : "", c.banco ? `Banco: ${c.banco}` : "", c.tipo ? `Tipo de cuenta: ${c.tipo}` : "",
-    c.cbu ? `CBU/CVU: ${c.cbu}` : "", c.alias ? `Alias: ${c.alias}` : "", c.cuit ? `CUIT/CUIL: ${c.cuit}` : "", c.nota ? `Nota: ${c.nota}` : "", avisoG]
+    c.cbu ? `CBU/CVU: ${c.cbu}` : "", c.alias ? `Alias: ${c.alias}` : "", c.cuit ? `CUIT/CUIL: ${c.cuit}` : "", c.nota ? `Nota: ${c.nota}` : "", avisoG, "LOS PAGOS SE ACREDITAN UNICAMENTE CON EL COMPROBANTE CORRESPONDIENTE SIN EXCEPCIONES"]
     .filter(Boolean).join("\n");
 }
 async function copiarTexto(txt, btn){
@@ -3130,7 +3148,7 @@ function _renderArchivo(cont){
           html += `<div class="tablewrap"><table class="arch-tabla"><thead><tr>
             <th>#</th><th>DNI</th><th>ACTOR</th><th>Teléfono</th><th>Carátula</th><th>Beneficio</th>
             <th class="num">Bruto</th><th class="num">Descuentos</th><th class="num">Neto</th><th class="num">15%</th><th class="num">20%</th>
-            <th>Honorarios</th><th>Transfirió</th><th>Liquidación contador</th><th>Comentarios</th><th></th></tr></thead><tbody>`;
+            <th>Honorarios</th><th>MODALIDAD DE PAGO</th><th>Liquidación contador</th><th>Comentarios</th><th></th></tr></thead><tbody>`;
           filas.forEach(({f: fGuardada, i}) => {
             const borrador = BORRADORES.get(c.id + "|" + i);
             const f = borrador || fGuardada;
@@ -3161,8 +3179,9 @@ function _renderArchivo(cont){
                 <label class="chk ok"><input type="checkbox" data-chk="hon" data-v="abono" ${f.hon==="abono"?"checked":""}> ABONÓ HONORARIOS</label>
                 <label class="chk no"><input type="checkbox" data-chk="hon" data-v="nopago" ${f.hon==="nopago"?"checked":""}> NO ABONÓ HONORARIOS</label>
               </td>
-              <td class="estado">
-                <label class="chk transf${f.transfirio ? " on" : ""}"><input type="checkbox" data-chk="transf" data-v="si" ${f.transfirio ? "checked" : ""}> TRANSFIRIÓ</label>
+              <td class="estado modalidad">
+                <label class="chk efvo${f.modalidad === "efectivo" ? " on" : ""}"><input type="checkbox" data-chk="modal" data-v="efectivo" ${f.modalidad === "efectivo" ? "checked" : ""}> EFECTIVO</label>
+                <label class="chk transf${f.transfirio ? " on" : ""}"><input type="checkbox" data-chk="transf" data-v="si" ${f.transfirio ? "checked" : ""}> TRANSFERENCIA</label>
               </td>
               <td class="estado">
                 <label class="chk ok"><input type="checkbox" data-chk="cont" data-v="pago" ${f.cont==="pago"?"checked":""}> ABONÓ LIQUIDACIÓN CONTADOR</label>
@@ -3373,15 +3392,31 @@ function conectarArchivo(cont){
     tr.querySelector("[data-ver-rep]").addEventListener("click", () => abrirReparto(c, BORRADORES.get(clave) || c.filas[i], clave));
     tr.querySelectorAll("[data-chk]").forEach(chk => chk.addEventListener("change", () => {
       const f = borrador(), k = chk.dataset.chk;
-      if(k === "transf"){
-        // TRANSFIRIÓ: al tildarla queda ABONÓ HONORARIOS; no se destilda si hay transferencias cargadas
-        if(!chk.checked && transfsDeFila(c.id, f._k).length){
-          alert("Esta complementaria tiene transferencias cargadas a este actor. Borralas en la solapa TRANSFERENCIAS AL ESTUDIO para destildar TRANSFIRIÓ.");
+      if(k === "modal"){
+        // EFECTIVO: no puede haber transferencias cargadas a este actor
+        if(!chk.checked){ f.modalidad = ""; renderArchivo(); return; }
+        if(transfsDeFila(c.id, f._k).length){
+          alert("Esta complementaria tiene transferencias cargadas a este actor. Borralas en la solapa TRANSFERENCIAS AL ESTUDIO para cambiar la modalidad.");
           chk.checked = true; return;
         }
-        f.transfirio = chk.checked;
-        if(chk.checked) f.hon = "abono";
-        renderArchivo();
+        f.modalidad = "efectivo"; f.transfirio = false;
+        renderArchivo(); return;
+      }
+      if(k === "transf"){
+        if(!chk.checked){
+          if(transfsDeFila(c.id, f._k).length){
+            alert("Esta complementaria tiene transferencias cargadas a este actor. Borralas en la solapa TRANSFERENCIAS AL ESTUDIO para cambiar la modalidad.");
+            chk.checked = true; return;
+          }
+          f.transfirio = false; if(f.modalidad === "transferencia") f.modalidad = "";
+          renderArchivo(); return;
+        }
+        // TRANSFERENCIA: queda ABONÓ HONORARIOS y se abre la solapa para completar la transferencia
+        f.transfirio = true; f.modalidad = "transferencia"; f.hon = "abono";
+        const clave2 = c.id + "|" + i;
+        c.filas[i] = Object.assign({}, c.filas[i], JSON.parse(JSON.stringify(f)), { mod: ahoraMs(), nuevo: false });
+        BORRADORES.delete(clave2); guardarArchivo();
+        abrirTransferenciaDesdeFila(c.id, c.filas[i]._k);
         return;
       }
       f[k] = chk.checked ? chk.dataset.v : "";   // las dos opciones de cada grupo se excluyen entre si
