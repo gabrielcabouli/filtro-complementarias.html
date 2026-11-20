@@ -71,6 +71,10 @@
   .chk.rep{color:#1d4ed8; background:#dbeafe; border:1px solid #93c5fd; width:230px; margin-top:6px; justify-content:center; font-size:12px;} .chk.rep input{accent-color:#2563eb; width:18px; height:18px;}
   .chk.no{color:#b91c1c; background:#fee2e2; border:1px solid #fca5a5;} .chk.no input{accent-color:#dc2626;}
   .chk.transf{color:#1e40af; background:#dbeafe; border:1px solid #60a5fa;} .chk.transf input{accent-color:#2563eb;}
+  .tr-recibe{grid-column:1 / -1;margin:6px 0;} .tr-recibe-t{font-size:14px;font-weight:900;letter-spacing:.04em;color:#1e3a5f;margin-bottom:6px;}
+  .tr-pills{display:flex;flex-wrap:wrap;gap:8px;}
+  .tr-pill{border:2px solid var(--c);color:var(--c);background:#fff;padding:9px 16px;border-radius:999px;font-weight:800;font-size:15px;cursor:pointer;}
+  .tr-pill.on{background:var(--c);color:#fff;box-shadow:0 0 0 3px rgba(0,0,0,.12);} .tr-pill.on::before{content:"✓ ";}
   .chk.transf.on{background:#2563eb; color:#fff; border-color:#1d4ed8;} .chk.transf.on input{accent-color:#fff;}
   tr.pagado td:not(.estado):not(.col-num):not(.col-tel), tr.pagado td:not(.estado):not(.col-num):not(.col-tel) input, tr.pagado td:not(.estado):not(.col-num):not(.col-tel) textarea{text-decoration:line-through; text-decoration-thickness:2px;}
   tr.pagado td:not(.estado):not(.col-tel){opacity:.6;}
@@ -2266,6 +2270,19 @@ function guardarArchivo(){
   actualizarContadorArchivo();
 }
 let _trEstadoTxt = "";
+// Agrega o quita una línea en el comentario de la fila (también en el borrador si lo hay)
+function cambiarObsFila(compId, filaK, linea, agregar){
+  const c = ARCHIVO[compId]; if(!c) return;
+  const i = (c.filas || []).findIndex(x => x._k === filaK && !x.borrado); if(i < 0) return;
+  const lineas = String(c.filas[i].obs || "").split("\n").filter(Boolean);
+  const tiene = lineas.includes(linea);
+  if(agregar && !tiene) lineas.push(linea);
+  if(!agregar && tiene) lineas.splice(lineas.indexOf(linea), 1);
+  const obs = lineas.join("\n");
+  c.filas[i] = Object.assign({}, c.filas[i], {obs, mod: ahoraMs()}); c.mod = ahoraMs();
+  const bk = compId + "|" + i;
+  if(BORRADORES.has(bk)) BORRADORES.get(bk).obs = obs;
+}
 // Abre la solapa TRANSFERENCIAS AL ESTUDIO con el cliente de la fila ya cargado
 function abrirTransferenciaDesdeFila(compId, filaK){
   document.querySelector('.tab[data-tab="tabTransf"]').click();
@@ -2431,7 +2448,9 @@ function trFormHtml(){
       <label>Actor de la complementaria<select id="trVincular"><option value="">— Sin vincular a una complementaria —</option></select></label>
       <label>Cliente<input type="text" id="trNombre" placeholder="Apellido y nombre"></label>
       <label>DNI<input type="text" id="trDni"></label>
-      <label>Integrante que recibe<select id="trIntegrante">${TRANSF_INTEGRANTES.map(n => `<option value="${n}">${n}</option>`).join("")}</select></label>
+      <div class="tr-recibe"><div class="tr-recibe-t">¿QUIÉN RECIBE EL DINERO?</div>
+        <div class="tr-pills" id="trIntPills">${TRANSF_INTEGRANTES.map(n => `<button type="button" class="tr-pill" data-pill="${esc(n)}" style="--c:${TRANSF_COLOR[n] || "#1e3a5f"};">${n}</button>`).join("")}</div>
+        <select id="trIntegrante" style="display:none;">${TRANSF_INTEGRANTES.map(n => `<option value="${n}">${n}</option>`).join("")}</select></div>
       <label>Importe transferido<input type="text" id="trImporte" placeholder="0,00"></label>
       <label>Juzgado (para repartir)<select id="trJuzgado"><option value="">—</option>${[1,2,3,4,5,6,7,8,9,10].map(n => `<option value="${n}">${n}</option>`).join("")}</select></label>
       <label>Tipo de cliente<select id="trTipo"><option value="particular">Particular</option><option value="mutual">Mutual (9%)</option></select></label>
@@ -2462,7 +2481,12 @@ function engancharForm(){
       trCalcular();
     }
   });
-  g("trIntegrante").addEventListener("change", trCalcular);
+  const pintarPills = () => document.querySelectorAll("#trIntPills .tr-pill").forEach(b => b.classList.toggle("on", b.dataset.pill === g("trIntegrante").value));
+  document.querySelectorAll("#trIntPills .tr-pill").forEach(b => b.addEventListener("click", () => {
+    g("trIntegrante").value = b.dataset.pill; pintarPills(); trCalcular();
+  }));
+  g("trIntegrante").addEventListener("change", () => { pintarPills(); trCalcular(); });
+  pintarPills();
   g("trImporte").addEventListener("input", trCalcular);
   g("trPct").addEventListener("input", trCalcular);
   g("trAgregar").addEventListener("click", registrarTransf);
@@ -2525,6 +2549,7 @@ function registrarTransf(){
   if(t.compId) marcarAbonoPorTransf(t.compId, t.filaK, true);
   if(t.compId && t.repartido) marcarRepPorTransf(t, true);
   if(t.compId) sincronizarFilaDesdeTransf(t);
+  if(t.compId) cambiarObsFila(t.compId, t.filaK, "Transferido a " + t.integrante, true);
   guardarArchivo();
   msg.style.color = "#15803d";
   msg.textContent = "✓ Transferencia registrada" + (t.compId ? " y marcada ABONÓ en la complementaria." : " (sin vincular: no toca las complementarias).");
@@ -2541,7 +2566,11 @@ async function borrarTransf(key){
   if(!(await preguntar("¿Borrar esta transferencia?", `${nombreLindo(t.nombre)} · ${fmtMoney(t.importe)} · ${t.integrante}.${aviso}`, "Sí, borrar"))) return;
   t.borrado = true; t.mod = ahoraMs();
   ARCHIVO[TRANSF_ID].mod = t.mod;
-  if(t.compId){ marcarAbonoPorTransf(t.compId, t.filaK, false); sincronizarFilaDesdeTransf(t); }
+  if(t.compId){
+    marcarAbonoPorTransf(t.compId, t.filaK, false); sincronizarFilaDesdeTransf(t);
+    const quedaOtra = transfVivas().some(x => x.compId === t.compId && x.filaK === t.filaK && x.integrante === t.integrante);
+    if(!quedaOtra) cambiarObsFila(t.compId, t.filaK, "Transferido a " + t.integrante, false);
+  }
   guardarArchivo(); refrescarVistasTransf();
 }
 // Reparto: si la transferencia está vinculada, el dato es el mismo "repartido" de la fila de la
@@ -2575,6 +2604,7 @@ function trEntHtml(t){
 }
 const trRepAbiertas = new Set();   // repartijas abiertas con VER REPARTO HONORARIOS
 const trGruposCerrados = new Set(); // integrantes con la lista de transferencias plegada
+const trVerRepartidas = new Set();  // integrantes que muestran sus transferencias ya repartidas
 function trRepHtml(t){
   const rep = estadoRepTransf(t);
   return `<button type="button" class="btn-ver-rep" data-trver="${esc(t._k)}">VER REPARTO HONORARIOS</button>`
@@ -2706,8 +2736,11 @@ function renderTransfLista(){
   let html = "";
   if(!lista.length) html = `<div class="panel" style="text-align:center;color:var(--muted);">Todavía no hay transferencias registradas.</div>`;
   grupos.forEach(n => {
-    const items = lista.filter(t => t.integrante === n).sort((a, b) => fechaOrden(a.fecha) - fechaOrden(b.fecha));
-    if(!items.length) return;
+    const todas = lista.filter(t => t.integrante === n);
+    if(!todas.length) return;
+    const nRep = todas.filter(t => estadoRepTransf(t)).length;
+    const verRep = trVerRepartidas.has(n);
+    const items = todas.filter(t => verRep || !estadoRepTransf(t)).sort((a, b) => fechaOrden(a.fecha) - fechaOrden(b.fecha));
     const esG = n === "GESTORIA";
     const tb = items.reduce((s, t) => s + montosTransf(t).bruto, 0);
     const tn = items.reduce((s, t) => s + montosTransf(t).neto, 0);
@@ -2722,6 +2755,7 @@ function renderTransfLista(){
       </div>
       <div class="tr-grupo-cuerpo"${cerrado ? ' style="display:none;"' : ""}>
       ${cuentasGrupoHtml(n)}
+      ${nRep ? `<div style="padding:6px 12px;"><button type="button" class="mini" data-trverrep="${esc(n)}">${verRep ? "Ocultar" : "Mostrar"} repartidas (${nRep})</button></div>` : ""}
       <div class="tablewrap" style="max-height:none;"><table class="deu-tabla"><thead><tr>
         <th>Fecha de pago</th><th>Cliente</th><th>DNI</th><th>Complementaria</th><th class="num">Importe</th>${esG ? '<th class="num">Comisión gestoría</th>' : ""}<th class="num">Neto</th><th>Honorarios</th><th>¿Integrante entregó el dinero recibido?</th><th>¿Ya se repartió entre el estudio?</th><th></th>
       </tr></thead><tbody>${items.map(t => {
@@ -2744,6 +2778,10 @@ function renderTransfLista(){
   cont.querySelectorAll("[data-trjz]").forEach(s => s.addEventListener("change", () => {
     const t = transfVivas().find(x => x._k === s.dataset.trjz); if(!t) return;
     setJuzgadoTransf(t, s.value);
+  }));
+  cont.querySelectorAll("[data-trverrep]").forEach(b => b.addEventListener("click", () => {
+    const n = b.dataset.trverrep; trVerRepartidas.has(n) ? trVerRepartidas.delete(n) : trVerRepartidas.add(n);
+    renderTransfLista();
   }));
   cont.querySelectorAll("[data-trgrupo]").forEach(h => h.addEventListener("click", () => {
     const n = h.dataset.trgrupo; trGruposCerrados.has(n) ? trGruposCerrados.delete(n) : trGruposCerrados.add(n);
