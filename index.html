@@ -2265,7 +2265,11 @@ function guardarArchivo(){
   }, 300);
   actualizarContadorArchivo();
 }
+let _trEstadoTxt = "";
 function marcarGuardado(ok){
+  _trEstadoTxt = ok ? "✓ Guardado automáticamente " + new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}) : "⚠️ No se pudo guardar";
+  const tr = document.getElementById("trEstado");
+  if(tr) tr.textContent = _trEstadoTxt;
   const el = document.getElementById("archEstado");
   if(el) el.textContent = ok ? "✓ Cambios guardados " + new Date().toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}) : "⚠️ No se pudo guardar";
 }
@@ -2552,6 +2556,7 @@ function trEntHtml(t){
        + `<label class="tr-radio"><input type="radio" name="${nm}" data-trent="${esc(t._k)}" data-v="0" ${t.entregado ? "" : "checked"}> No</label>`;
 }
 const trRepAbiertas = new Set();   // repartijas abiertas con VER REPARTO HONORARIOS
+const trGruposCerrados = new Set(); // integrantes con la lista de transferencias plegada
 function trRepHtml(t){
   const rep = estadoRepTransf(t);
   return `<button type="button" class="btn-ver-rep" data-trver="${esc(t._k)}">VER REPARTO HONORARIOS</button>`
@@ -2678,7 +2683,7 @@ function renderTransfLista(){
         return `<div><span>${esc(n)} · pendiente${ult ? " · último aviso " + ult : " · sin aviso previo"}</span><b style="color:${p > 0 ? "#b91c1c" : "#15803d"};">${fmtMoney(p)}</b></div>`;
       }).join("")}
     </div>` : "";
-  const filtroHtml = `<div class="tr-filtro"><label>Ver integrante:
+  const filtroHtml = `<div class="tr-filtro"><span id="trEstado" class="muted" style="font-size:12px;margin-right:12px;">${esc(_trEstadoTxt || "Cada cambio se guarda solo.")}</span><label>Ver integrante:
       <select id="trFiltroInt">${["Todos", ...TRANSF_INTEGRANTES].map(o => `<option value="${o}" ${trFiltroInt === o ? "selected" : ""}>${o}</option>`).join("")}</select></label></div>`;
   let html = "";
   if(!lista.length) html = `<div class="panel" style="text-align:center;color:var(--muted);">Todavía no hay transferencias registradas.</div>`;
@@ -2691,11 +2696,13 @@ function renderTransfLista(){
     const pend = pendienteDeIntegrante(n);
     const col = TRANSF_COLOR[n] || "#1e3a5f";
     const cols = esG ? 11 : 10;
+    const cerrado = trGruposCerrados.has(n);
     html += `<div class="tr-grupo">
-      <div class="tr-int-h" style="background:${col};">
-        <span class="tr-int-nombre">${esc(n)}</span>
+      <div class="tr-int-h tr-int-toggle" data-trgrupo="${esc(n)}" title="Tocá para ver u ocultar las transferencias de ${esc(n)}" style="background:${col};cursor:pointer;">
+        <span class="tr-int-nombre">${cerrado ? "▸" : "▾"} ${esc(n)}</span>
         <span class="tr-int-tot">${pend > 0.005 ? "Pendiente de repartir: <b>" + fmtMoney(pend) + "</b>" : "✓ Todo repartido"} · Total transferido: <b>${fmtMoney(tb)}</b>${esG ? ` · Comisiones: <b>${fmtMoney(tb - tn)}</b> · Neto: <b>${fmtMoney(tn)}</b>` : ""}</span>
       </div>
+      <div class="tr-grupo-cuerpo"${cerrado ? ' style="display:none;"' : ""}>
       ${cuentasGrupoHtml(n)}
       <div class="tablewrap" style="max-height:none;"><table class="deu-tabla"><thead><tr>
         <th>Fecha de pago</th><th>Cliente</th><th>DNI</th><th>Complementaria</th><th class="num">Importe</th>${esG ? '<th class="num">Comisión gestoría</th>' : ""}<th class="num">Neto</th><th>Honorarios</th><th>¿Integrante entregó el dinero recibido?</th><th>¿Ya se repartió entre el estudio?</th><th></th>
@@ -2706,7 +2713,7 @@ function renderTransfLista(){
           <td>${esc(t.fecha)}</td><td><b>${esc(nombreLindo(t.nombre))}</b></td><td>${esc(t.dni || "")}</td><td>${esc(t.complementaria || "—")}</td>
           <td class="num">${fmtMoney(m.bruto)}</td>${esG ? `<td class="num">− ${fmtMoney(m.comision)} (${String(pctTransf(t)).replace(".", ",")}%)</td>` : ""}<td class="num">${fmtMoney(m.neto)}</td>
           <td>${trEstado(t)}</td><td>${trEntHtml(t)}</td><td>${trRepHtml(t)}</td><td><button class="danger" data-trdel="${esc(t._k)}">Borrar</button></td></tr>${trRepAbiertas.has(t._k) ? `<tr><td colspan="${cols}" class="tr-rep-cel">${repartijaHtml(t)}</td></tr>` : ""}`;
-      }).join("")}</tbody></table></div></div>`;
+      }).join("")}</tbody></table></div></div></div>`;
   });
   cont.innerHTML = filtroHtml + resumenHtml + html;
   cont.querySelector("#trFiltroInt").addEventListener("change", e => { trFiltroInt = e.target.value; renderTransfLista(); });
@@ -2719,6 +2726,10 @@ function renderTransfLista(){
   cont.querySelectorAll("[data-trjz]").forEach(s => s.addEventListener("change", () => {
     const t = transfVivas().find(x => x._k === s.dataset.trjz); if(!t) return;
     setJuzgadoTransf(t, s.value);
+  }));
+  cont.querySelectorAll("[data-trgrupo]").forEach(h => h.addEventListener("click", () => {
+    const n = h.dataset.trgrupo; trGruposCerrados.has(n) ? trGruposCerrados.delete(n) : trGruposCerrados.add(n);
+    renderTransfLista();
   }));
   cont.querySelectorAll("[data-trdel]").forEach(b => b.addEventListener("click", () => borrarTransf(b.dataset.trdel)));
   cont.querySelectorAll("[data-trent]").forEach(r => r.addEventListener("change", () => {
@@ -2786,9 +2797,12 @@ function parsearDatosCuenta(texto){
   return out;
 }
 function textoCuentaCliente(c){
+  // si la cuenta es de la GESTORIA, avisa que cobra su comisión por efectuar la transferencia
+  const pctTxt = String((GESTORIA_COMISION * 100).toFixed(2)).replace(".", ",");
+  const avisoG = c.integrante === "GESTORIA" ? `IMPORTANTE: se informa que la Gestoría cobra el ${pctTxt}% por efectuar la transferencia.` : "";
   return ["Datos para transferencia",
     c.titular ? `Titular: ${c.titular}` : "", c.banco ? `Banco: ${c.banco}` : "", c.tipo ? `Tipo de cuenta: ${c.tipo}` : "",
-    c.cbu ? `CBU/CVU: ${c.cbu}` : "", c.alias ? `Alias: ${c.alias}` : "", c.cuit ? `CUIT/CUIL: ${c.cuit}` : "", c.nota ? `Nota: ${c.nota}` : ""]
+    c.cbu ? `CBU/CVU: ${c.cbu}` : "", c.alias ? `Alias: ${c.alias}` : "", c.cuit ? `CUIT/CUIL: ${c.cuit}` : "", c.nota ? `Nota: ${c.nota}` : "", avisoG]
     .filter(Boolean).join("\n");
 }
 async function copiarTexto(txt, btn){
@@ -2899,11 +2913,14 @@ function cuentasGrupoHtml(n){
       <span class="tr-gc-botones"><button class="mini" data-ccopiar="${esc(c._k)}">📋 Copiar</button>
       <button class="mini secondary" data-cedit="${esc(c._k)}">✏️ Editar</button></span></div>`).join("")}</div>`;
 }
+let trCuentasAbiertas = false;   // el bloque de cuentas empieza plegado para no ocupar espacio
 function renderCuentas(){
   const cont = document.getElementById("trCuentas"); if(!cont) return;
   cont.innerHTML = `<div class="panel">
-    <b style="font-size:16px;">🏦 Cuentas de cobro de los integrantes</b>
-    <div class="sub" style="margin:4px 0 0;">Cada integrante puede tener varias cuentas. La marcada con ⭐ es la de por defecto, y podés cambiarla. Los datos quedan guardados y se editan cuando quieras.</div>
+    <div class="tr-cuentas-h" id="trCuentasToggle" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;">
+      <b style="font-size:16px;">${trCuentasAbiertas ? "▾" : "▸"} 🏦 Cuentas de cobro de los integrantes</b>
+      <span class="muted" style="font-size:12px;">${trCuentasAbiertas ? "Tocá para contraer" : "Tocá para ver las cuentas"}</span></div>
+    ${trCuentasAbiertas ? `<div class="sub" style="margin:4px 0 0;">Cada integrante puede tener varias cuentas. La marcada con ⭐ es la de por defecto, y podés cambiarla. Los datos quedan guardados y se editan cuando quieras.</div>
     <div class="tr-cuentas">${TRANSF_INTEGRANTES.map(n => {
       const cs = cuentasVivas(n);
       return `<div class="tr-cta-card">
@@ -2911,7 +2928,8 @@ function renderCuentas(){
           <button class="mini" data-cnueva="${esc(n)}">+ Agregar cuenta</button></div>
         ${cs.length ? cs.map(bloqueCuentaHtml).join("") : `<div class="muted" style="padding:10px 12px;">Sin cuentas cargadas.</div>`}
       </div>`;
-    }).join("")}</div></div>`;
+    }).join("")}</div>` : ""}</div>`;
+  document.getElementById("trCuentasToggle").addEventListener("click", () => { trCuentasAbiertas = !trCuentasAbiertas; renderCuentas(); });
   cont.querySelectorAll("[data-cnueva]").forEach(b => b.addEventListener("click", () => abrirEdicionCuenta(b.dataset.cnueva, null)));
   cont.querySelectorAll("[data-cedit]").forEach(b => b.addEventListener("click", () => abrirEdicionCuenta(cuentaPorKey(b.dataset.cedit).integrante, cuentaPorKey(b.dataset.cedit))));
   cont.querySelectorAll("[data-cdef]").forEach(b => b.addEventListener("click", () => setDefaultCuenta(b.dataset.cint, b.dataset.cdef)));
