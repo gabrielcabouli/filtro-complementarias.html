@@ -71,6 +71,7 @@
   .chk.rep{color:#1d4ed8; background:#dbeafe; border:1px solid #93c5fd; width:230px; margin-top:6px; justify-content:center; font-size:12px;} .chk.rep input{accent-color:#2563eb; width:18px; height:18px;}
   .chk.no{color:#b91c1c; background:#fee2e2; border:1px solid #fca5a5;} .chk.no input{accent-color:#dc2626;}
   .chk.transf{color:#1e40af; background:#dbeafe; border:1px solid #60a5fa;} .chk.transf input{accent-color:#2563eb;}
+  .tr-quien{color:#1e40af;font-size:12px;font-weight:700;margin-bottom:4px;background:#dbeafe;border:1px solid #60a5fa;border-radius:6px;padding:4px 6px;}
   .tr-recibe{grid-column:1 / -1;margin:6px 0;} .tr-recibe-t{font-size:14px;font-weight:900;letter-spacing:.04em;color:#1e3a5f;margin-bottom:6px;}
   .tr-pills{display:flex;flex-wrap:wrap;gap:8px;}
   .tr-pill{border:2px solid var(--c);color:var(--c);background:#fff;padding:9px 16px;border-radius:999px;font-weight:800;font-size:15px;cursor:pointer;}
@@ -2455,7 +2456,7 @@ function trFormHtml(){
       <label>Juzgado (para repartir)<select id="trJuzgado"><option value="">—</option>${[1,2,3,4,5,6,7,8,9,10].map(n => `<option value="${n}">${n}</option>`).join("")}</select></label>
       <label>Tipo de cliente<select id="trTipo"><option value="particular">Particular</option><option value="mutual">Mutual (9%)</option></select></label>
       <label id="trPctWrap">% que retiene la gestoría<input type="text" id="trPct" value="3,25"></label>
-      <label>Fecha de pago<input type="date" id="trFecha" value="${hoyISO}"></label>
+      <label>Fecha de la transferencia<input type="date" id="trFecha" value="${hoyISO}"></label>
       <div class="tr-radio-grupo"><span>¿El integrante ya entregó el dinero recibido?</span><label class="tr-radio"><input type="radio" name="trFormEnt" value="no" checked> No</label><label class="tr-radio"><input type="radio" name="trFormEnt" value="si"> Sí</label></div>
       <div class="tr-radio-grupo"><span>¿Ya se repartió este dinero entre el estudio?</span><label class="tr-radio"><input type="radio" name="trFormRep" value="no" checked> No</label><label class="tr-radio"><input type="radio" name="trFormRep" value="si"> Sí</label></div>
     </div>
@@ -2549,7 +2550,6 @@ function registrarTransf(){
   if(t.compId) marcarAbonoPorTransf(t.compId, t.filaK, true);
   if(t.compId && t.repartido) marcarRepPorTransf(t, true);
   if(t.compId) sincronizarFilaDesdeTransf(t);
-  if(t.compId) cambiarObsFila(t.compId, t.filaK, "Transferido a " + t.integrante, true);
   guardarArchivo();
   msg.style.color = "#15803d";
   msg.textContent = "✓ Transferencia registrada" + (t.compId ? " y marcada ABONÓ en la complementaria." : " (sin vincular: no toca las complementarias).");
@@ -2568,8 +2568,8 @@ async function borrarTransf(key){
   ARCHIVO[TRANSF_ID].mod = t.mod;
   if(t.compId){
     marcarAbonoPorTransf(t.compId, t.filaK, false); sincronizarFilaDesdeTransf(t);
-    const quedaOtra = transfVivas().some(x => x.compId === t.compId && x.filaK === t.filaK && x.integrante === t.integrante);
-    if(!quedaOtra) cambiarObsFila(t.compId, t.filaK, "Transferido a " + t.integrante, false);
+    const quedaOtra = transfVivas().some(x => x.compId === t.compId && x.filaK === t.filaK && x.integrante === t.integrante && x.fecha === t.fecha);
+    void quedaOtra;
   }
   guardarArchivo(); refrescarVistasTransf();
 }
@@ -2757,7 +2757,7 @@ function renderTransfLista(){
       ${cuentasGrupoHtml(n)}
       ${nRep ? `<div style="padding:6px 12px;"><button type="button" class="mini" data-trverrep="${esc(n)}">${verRep ? "Ocultar" : "Mostrar"} repartidas (${nRep})</button></div>` : ""}
       <div class="tablewrap" style="max-height:none;"><table class="deu-tabla"><thead><tr>
-        <th>Fecha de pago</th><th>Cliente</th><th>DNI</th><th>Complementaria</th><th class="num">Importe</th>${esG ? '<th class="num">Comisión gestoría</th>' : ""}<th class="num">Neto</th><th>Honorarios</th><th>¿Integrante entregó el dinero recibido?</th><th>¿Ya se repartió entre el estudio?</th><th></th>
+        <th>Fecha de la transferencia</th><th>Cliente</th><th>DNI</th><th>Complementaria</th><th class="num">Importe</th>${esG ? '<th class="num">Comisión gestoría</th>' : ""}<th class="num">Neto</th><th>Honorarios</th><th>¿Integrante entregó el dinero recibido?</th><th>¿Ya se repartió entre el estudio?</th><th></th>
       </tr></thead><tbody>${items.map(t => {
         const m = montosTransf(t);
         const clase = estadoRepTransf(t) ? "tr-rep" : (t.entregado ? "tr-ent" : "");
@@ -3225,7 +3225,7 @@ function _renderArchivo(cont){
                 <label class="chk ok"><input type="checkbox" data-chk="cont" data-v="pago" ${f.cont==="pago"?"checked":""}> ABONÓ LIQUIDACIÓN CONTADOR</label>
                 <label class="chk no"><input type="checkbox" data-chk="cont" data-v="nopago" ${f.cont==="nopago"?"checked":""}> NO ABONÓ LIQUIDACIÓN CONTADOR</label>
               </td>
-              <td class="estado"><textarea data-f="obs" rows="4" class="comentario" placeholder="Escribí un comentario sobre este actor…" style="width:230px;">${esc(f.obs)}</textarea>
+              <td class="estado">${transfsDeFila(c.id, f._k).map(t => `<div class="tr-quien">Transferido a <b>${esc(t.integrante)}</b> el ${esc(t.fecha)}</div>`).join("")}<textarea data-f="obs" rows="4" class="comentario" placeholder="Escribí un comentario sobre este actor…" style="width:230px;">${esc(f.obs)}</textarea>
                 <div class="rep-btns"><button type="button" class="btn-ver-rep" data-ver-rep="1">VER REPARTO HONORARIOS</button><button type="button" class="btn-rep${f.rep ? " on" : ""}" data-rep-btn="1" aria-pressed="${f.rep ? "true" : "false"}">${f.rep ? "✓ " : ""}HONORARIOS REPARTIDOS</button></div></td>
               <td class="estado acciones-fila">
                 <button class="btn-guardar-fila${borrador ? " pendiente" : ""}" data-guardarfila="1">${borrador ? "💾 GUARDAR" : (ultimaFilaGuardada === c.id + "|" + i ? "✓ Guardado" : "💾 Guardar")}</button>
