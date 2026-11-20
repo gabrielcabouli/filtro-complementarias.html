@@ -985,7 +985,6 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
 
 
 <script>
-
 window.addEventListener("error", function(e){
   try{
     const el = document.getElementById("log");
@@ -2196,6 +2195,8 @@ let ARCHIVO = {};          // { id: {id, complementaria, fechaPago, anio, guarda
 let archivoListo = false;
 const TRANSF_ID = "__transferencias__";
 const TRANSF_INTEGRANTES = ["Diana", "Rubén", "Gabriel", "Damián", "Guillermo", "Roberta", "GESTORIA"];
+// un color distinto por integrante (recuadros de la solapa TRANSFERENCIAS AL ESTUDIO)
+const TRANSF_COLOR = {"Diana": "#7c3aed", "Rubén": "#1e3a5f", "Gabriel": "#2563eb", "Damián": "#0d9488", "Guillermo": "#d97706", "Roberta": "#db2777", "GESTORIA": "#475569"};
 const GESTORIA_COMISION = 0.0325;
 let trResultados = [], trSel = null, trFiltroInt = "Todos";
 const ARCH_DB = "filtro_complementarias", ARCH_STORE = "archivo", ARCH_KEY = "todo";
@@ -2414,8 +2415,8 @@ function trFormHtml(){
       <label>Tipo de cliente<select id="trTipo"><option value="particular">Particular</option><option value="mutual">Mutual (9%)</option></select></label>
       <label id="trPctWrap">% que retiene la gestoría<input type="text" id="trPct" value="3,25"></label>
       <label>Fecha de pago<input type="date" id="trFecha" value="${hoyISO}"></label>
-      <div class="tr-radio-grupo"><span>¿El integrante ya pagó el dinero recibido?</span><label class="tr-radio"><input type="radio" name="trFormEnt" value="no" checked> No</label><label class="tr-radio"><input type="radio" name="trFormEnt" value="si"> Sí</label></div>
-      <div class="tr-radio-grupo"><span>¿El integrante ya repartió este dinero entre el estudio?</span><label class="tr-radio"><input type="radio" name="trFormRep" value="no" checked> No</label><label class="tr-radio"><input type="radio" name="trFormRep" value="si"> Sí</label></div>
+      <div class="tr-radio-grupo"><span>¿El integrante ya entregó el dinero recibido?</span><label class="tr-radio"><input type="radio" name="trFormEnt" value="no" checked> No</label><label class="tr-radio"><input type="radio" name="trFormEnt" value="si"> Sí</label></div>
+      <div class="tr-radio-grupo"><span>¿Ya se repartió este dinero entre el estudio?</span><label class="tr-radio"><input type="radio" name="trFormRep" value="no" checked> No</label><label class="tr-radio"><input type="radio" name="trFormRep" value="si"> Sí</label></div>
     </div>
     <div id="trCalc" class="recibo-total"></div>
     <div class="actions"><button id="trAgregar">💾 REGISTRAR TRANSFERENCIA</button></div>
@@ -2430,7 +2431,14 @@ function engancharForm(){
   g("trVincular").addEventListener("change", () => {
     const v = g("trVincular").value;
     trSel = v === "" ? null : (trResultados[+v] || null);
-    if(trSel){ g("trNombre").value = nombreLindo(trSel.f.name); g("trDni").value = trSel.f.docnum || ""; }
+    if(trSel){
+      const f = trSel.f, pct = f.pct === 15 ? 15 : 20;   // el 15% o 20% elegido en la complementaria
+      g("trNombre").value = nombreLindo(f.name); g("trDni").value = f.docnum || "";
+      g("trImporte").value = (Math.round((f.bruto || 0) * pct) / 100).toFixed(2).replace(".", ",");   // editable
+      const j = juzgadoRep(f) != null ? juzgadoRep(f) : (f.juzgado ? +f.juzgado : null);
+      g("trJuzgado").value = j != null ? String(j) : "";
+      trCalcular();
+    }
   });
   g("trIntegrante").addEventListener("change", trCalcular);
   g("trImporte").addEventListener("input", trCalcular);
@@ -2543,10 +2551,11 @@ function trEntHtml(t){
   return `<label class="tr-radio"><input type="radio" name="${nm}" data-trent="${esc(t._k)}" data-v="1" ${t.entregado ? "checked" : ""}> Sí</label>`
        + `<label class="tr-radio"><input type="radio" name="${nm}" data-trent="${esc(t._k)}" data-v="0" ${t.entregado ? "" : "checked"}> No</label>`;
 }
+const trRepAbiertas = new Set();   // repartijas abiertas con VER REPARTO HONORARIOS
 function trRepHtml(t){
-  const rep = estadoRepTransf(t), nm = "trrep-" + t._k;
-  return `<label class="tr-radio"><input type="radio" name="${nm}" data-trrep="${esc(t._k)}" data-v="1" ${rep ? "checked" : ""}> Sí</label>`
-       + `<label class="tr-radio"><input type="radio" name="${nm}" data-trrep="${esc(t._k)}" data-v="0" ${rep ? "" : "checked"}> No</label>`;
+  const rep = estadoRepTransf(t);
+  return `<button type="button" class="btn-ver-rep" data-trver="${esc(t._k)}">VER REPARTO HONORARIOS</button>`
+       + `<button type="button" class="btn-rep${rep ? " on" : ""}" data-trrepbtn="${esc(t._k)}" aria-pressed="${rep ? "true" : "false"}">${rep ? "✓ HONORARIOS REPARTIDOS" : "HONORARIOS REPARTIDOS"}</button>`;
 }
 // Repartija de una transferencia: usa el mismo cálculo que VER REPARTO (calcRep).
 // Base = lo que efectivamente ingresó al estudio por esa transferencia (neto si es GESTORIA).
@@ -2680,7 +2689,7 @@ function renderTransfLista(){
     const tb = items.reduce((s, t) => s + montosTransf(t).bruto, 0);
     const tn = items.reduce((s, t) => s + montosTransf(t).neto, 0);
     const pend = pendienteDeIntegrante(n);
-    const col = REP_COLOR[n] || "#1e3a5f";
+    const col = TRANSF_COLOR[n] || "#1e3a5f";
     const cols = esG ? 11 : 10;
     html += `<div class="tr-grupo">
       <div class="tr-int-h" style="background:${col};">
@@ -2689,14 +2698,14 @@ function renderTransfLista(){
       </div>
       ${cuentasGrupoHtml(n)}
       <div class="tablewrap" style="max-height:none;"><table class="deu-tabla"><thead><tr>
-        <th>Fecha de pago</th><th>Cliente</th><th>DNI</th><th>Complementaria</th><th class="num">Importe</th>${esG ? '<th class="num">Comisión gestoría</th>' : ""}<th class="num">Neto</th><th>Honorarios</th><th>¿Integrante pagó el dinero recibido?</th><th>¿Repartido entre el estudio?</th><th></th>
+        <th>Fecha de pago</th><th>Cliente</th><th>DNI</th><th>Complementaria</th><th class="num">Importe</th>${esG ? '<th class="num">Comisión gestoría</th>' : ""}<th class="num">Neto</th><th>Honorarios</th><th>¿Integrante entregó el dinero recibido?</th><th>¿Ya se repartió entre el estudio?</th><th></th>
       </tr></thead><tbody>${items.map(t => {
         const m = montosTransf(t);
         const clase = estadoRepTransf(t) ? "tr-rep" : (t.entregado ? "tr-ent" : "");
         return `<tr class="${clase}">
           <td>${esc(t.fecha)}</td><td><b>${esc(nombreLindo(t.nombre))}</b></td><td>${esc(t.dni || "")}</td><td>${esc(t.complementaria || "—")}</td>
           <td class="num">${fmtMoney(m.bruto)}</td>${esG ? `<td class="num">− ${fmtMoney(m.comision)} (${String(pctTransf(t)).replace(".", ",")}%)</td>` : ""}<td class="num">${fmtMoney(m.neto)}</td>
-          <td>${trEstado(t)}</td><td>${trEntHtml(t)}</td><td>${trRepHtml(t)}</td><td><button class="danger" data-trdel="${esc(t._k)}">Borrar</button></td></tr>${estadoRepTransf(t) ? `<tr><td colspan="${cols}" class="tr-rep-cel">${repartijaHtml(t)}</td></tr>` : ""}`;
+          <td>${trEstado(t)}</td><td>${trEntHtml(t)}</td><td>${trRepHtml(t)}</td><td><button class="danger" data-trdel="${esc(t._k)}">Borrar</button></td></tr>${trRepAbiertas.has(t._k) ? `<tr><td colspan="${cols}" class="tr-rep-cel">${repartijaHtml(t)}</td></tr>` : ""}`;
       }).join("")}</tbody></table></div></div>`;
   });
   cont.innerHTML = filtroHtml + resumenHtml + html;
@@ -2715,6 +2724,15 @@ function renderTransfLista(){
   cont.querySelectorAll("[data-trent]").forEach(r => r.addEventListener("change", () => {
     const t = transfVivas().find(x => x._k === r.dataset.trent); if(!t) return;
     t.entregado = r.dataset.v === "1"; t.mod = ahoraMs(); ARCHIVO[TRANSF_ID].mod = t.mod;
+    guardarArchivo(); refrescarVistasTransf();
+  }));
+  cont.querySelectorAll("[data-trver]").forEach(b => b.addEventListener("click", () => {
+    const k = b.dataset.trver; trRepAbiertas.has(k) ? trRepAbiertas.delete(k) : trRepAbiertas.add(k);
+    renderTransfLista();
+  }));
+  cont.querySelectorAll("[data-trrepbtn]").forEach(b => b.addEventListener("click", () => {
+    const t = transfVivas().find(x => x._k === b.dataset.trrepbtn); if(!t) return;
+    marcarRepPorTransf(t, !estadoRepTransf(t));
     guardarArchivo(); refrescarVistasTransf();
   }));
   cont.querySelectorAll("[data-trrep]").forEach(r => r.addEventListener("change", () => {
@@ -2889,7 +2907,7 @@ function renderCuentas(){
     <div class="tr-cuentas">${TRANSF_INTEGRANTES.map(n => {
       const cs = cuentasVivas(n);
       return `<div class="tr-cta-card">
-        <div class="tr-int-h" style="background:${REP_COLOR[n] || "#1e3a5f"};"><span class="tr-int-nombre" style="font-size:18px;">${esc(n)}</span>
+        <div class="tr-int-h" style="background:${TRANSF_COLOR[n] || "#1e3a5f"};"><span class="tr-int-nombre" style="font-size:18px;">${esc(n)}</span>
           <button class="mini" data-cnueva="${esc(n)}">+ Agregar cuenta</button></div>
         ${cs.length ? cs.map(bloqueCuentaHtml).join("") : `<div class="muted" style="padding:10px 12px;">Sin cuentas cargadas.</div>`}
       </div>`;
@@ -3340,7 +3358,7 @@ function conectarArchivo(cont){
       if(k === "transf"){
         // TRANSFIRIÓ: al tildarla queda ABONÓ HONORARIOS; no se destilda si hay transferencias cargadas
         if(!chk.checked && transfsDeFila(c.id, f._k).length){
-          alert("Esta complementaria tiene transferencias cargadas a este actor. Borralas en la solapa TRANSFERENCIAS para destildar TRANSFIRIÓ.");
+          alert("Esta complementaria tiene transferencias cargadas a este actor. Borralas en la solapa TRANSFERENCIAS AL ESTUDIO para destildar TRANSFIRIÓ.");
           chk.checked = true; return;
         }
         f.transfirio = chk.checked;
@@ -4928,7 +4946,6 @@ const SYNC = (() => {
 
   return {iniciar, sincronizar, programarSubida, configurado, textoEstado, abrirConfig, pintar, abrirHistorial};
 })();
-
 
 </script>
 </body>
