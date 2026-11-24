@@ -2701,6 +2701,10 @@ async function procesarComprobante(archivo){
     const avisos = [];
     if(d.cuilDudoso) avisos.push(`El CUIL leído (${d.cuilDudoso}) no pasa la verificación: el DNI no se completó.`);
     if(d.importeSinCentavos) avisos.push("El importe se leyó sin centavos: verificá los centavos.");
+    if(!d.nombre){
+      avisos.push("No identifiqué al cliente en el comprobante (puede haberlo pagado un familiar): buscalo en 'Buscar cliente' para vincularlo, o completá nombre y DNI a mano.");
+      const buscar = document.getElementById("trBuscar"); if(buscar) buscar.focus();
+    }
     const aviso = avisos.length ? " ⚠️ " + avisos.join(" ") : "";
     set(`✓ Completé: ${cambios.join(", ")}. Revisá los datos antes de registrar; todo se puede editar.` + aviso, avisos.length ? "#b45309" : "#15803d");
   }catch(e){
