@@ -3767,9 +3767,8 @@ function _renderArchivo(cont){
               <td class="estado">
                 <label class="chk ok"><input type="checkbox" data-chk="cont" data-v="pago" ${f.cont==="pago"?"checked":""}> ABONÓ LIQUIDACIÓN CONTADOR</label>
                 <label class="chk no"><input type="checkbox" data-chk="cont" data-v="nopago" ${f.cont==="nopago"?"checked":""}> NO ABONÓ LIQUIDACIÓN CONTADOR</label>
-                <label class="chk"><input type="checkbox" data-embchk="1" ${f.embargo ? "checked" : ""}> COBRO POR EMBARGO</label>
               </td>
-              <td class="estado">${transfsDeFila(c.id, f._k).map(t => `<div class="tr-quien">Transferido a <b>${esc(t.integrante)}</b> el ${esc(t.fecha)}</div>`).join("")}<textarea data-f="obs" rows="4" class="comentario" placeholder="Escribí un comentario sobre este actor…" style="width:230px;">${esc(f.obs)}</textarea>
+              <td class="estado"><label class="chk" style="width:auto;margin:0 0 6px;"><input type="checkbox" data-embchk="1" ${f.embargo ? "checked" : ""}> COBRO POR EMBARGO</label>${transfsDeFila(c.id, f._k).map(t => `<div class="tr-quien">Transferido a <b>${esc(t.integrante)}</b> el ${esc(t.fecha)}</div>`).join("")}<textarea data-f="obs" rows="4" class="comentario" placeholder="Escribí un comentario sobre este actor…" style="width:230px;">${esc(f.obs)}</textarea>
                 <div class="rep-btns"><button type="button" class="btn-ver-rep" data-ver-rep="1">VER REPARTO HONORARIOS</button><button type="button" class="btn-rep${f.rep ? " on" : ""}" data-rep-btn="1" aria-pressed="${f.rep ? "true" : "false"}">${f.rep ? "✓ " : ""}HONORARIOS REPARTIDOS</button></div></td>
               <td class="estado acciones-fila">
                 <button class="btn-guardar-fila${borrador ? " pendiente" : ""}" data-guardarfila="1">${borrador ? "💾 GUARDAR" : (ultimaFilaGuardada === c.id + "|" + i ? "✓ Guardado" : "💾 Guardar")}</button>
