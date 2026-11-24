@@ -2520,13 +2520,47 @@ function cargarTesseract(){
   });
   return _tesseractPromesa;
 }
+// Los centavos van en superíndice junto al importe y el OCR suele perderlos:
+// se relee solo ese recuadro, ampliado. Mismos parámetros que se probaron con el comprobante de Galicia.
+async function centavosDelImporte(blob, palabras, worker){
+  const imp = palabras.find(w => /^\d{1,3}(\.\d{3})+$/.test((w.text || "").trim()));
+  if(!imp) return null;
+  const b = imp.bbox, ancho = b.x1 - b.x0, alto = b.y1 - b.y0;
+  const sx = b.x1 - ancho * 0.12, sw = ancho * 0.12 + 8, sy = b.y0 - 2, sh = alto * 0.5 + 4;
+  const bmp = await createImageBitmap(blob);
+  const k = 6, pad = 60;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(sw * k) + 2 * pad; canvas.height = Math.round(sh * k) + 2 * pad;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(bmp, sx, sy, sw, sh, pad, pad, Math.round(sw * k), Math.round(sh * k));
+  if(bmp.close) bmp.close();
+  await worker.setParameters({tessedit_pageseg_mode: "7", tessedit_char_whitelist: "0123456789"});
+  const {data} = await worker.recognize(canvas);
+  const d = ((data && data.text) || "").replace(/\D/g, "");
+  return {imp, cents: d.length === 2 ? d : null};
+}
 async function textoDeImagen(blob, set){
   const T = await cargarTesseract();
-  const r = await T.recognize(blob, "spa+eng", {logger: m => {
+  const opts = typeof TESS_LOCAL !== "undefined" ? TESS_LOCAL : {};
+  const worker = await T.createWorker("spa", 1, Object.assign({}, opts, {logger: m => {
     if(m.status === "recognizing text") set(`Leyendo imagen… ${Math.round((m.progress || 0) * 100)}%`);
-  }});
-  return (r && r.data && r.data.text) || "";
+  }}));
+  try{
+    const r = await worker.recognize(blob);
+    let texto = (r && r.data && r.data.text) || "";
+    const c = await centavosDelImporte(blob, (r && r.data && r.data.words) || [], worker);
+    if(c && c.cents){
+      const importe = c.imp.text.trim();
+      texto = texto.replace(importe, importe + "," + c.cents);
+    }
+    return texto;
+  } finally {
+    await worker.terminate();
+  }
 }
+
 async function textoDePdf(file){
   const pdf = await pdfjsLib.getDocument({data: await file.arrayBuffer()}).promise;
   const partes = [];
@@ -2548,17 +2582,29 @@ async function textoDePdfEscaneado(file, set){
   return textoDeImagen(blob, set);
 }
 // Extrae de un texto: importe, fecha, quién recibe (integrante), DNI y nombre del ordenante
+// Dígito verificador de CUIT/CUIL (módulo 11)
+function cuitValido(n11){
+  const d = String(n11).split("").map(Number);
+  if(d.length !== 11) return false;
+  const pesos = [5,4,3,2,7,6,5,4,3,2];
+  const s = pesos.reduce((acc, p, i) => acc + p * d[i], 0);
+  let dv = 11 - (s % 11); if(dv === 11) dv = 0;
+  return dv !== 10 && dv === d[10];
+}
 function parsearComprobante(texto){
   const t = String(texto || "").replace(/\r/g, "");
   const out = {};
   // importe: el que aparece junto a "importe/monto/total"; si no, el primer $ con centavos
   // (los centavos pueden venir en superíndice, p. ej. "$ 819.589 69" → 819.589,69)
-  let m = /(?:IMPORTE|MONTO|TOTAL)[^\d\n]{0,25}\$?\s*(\d{1,3}(?:\.\d{3})*,\d{2}|\d+(?:[.,]\d{2})?)/i.exec(t)
-       || /\$\s*(\d{1,3}(?:\.\d{3})*)[,\s]?(\d{2})\b/.exec(t);
-  if(m){
-    const v = m[2] !== undefined ? parseFloat(m[1].replace(/\./g, "") + "." + m[2]) : importeFlexible(m[1]);
-    if(v > 0) out.importe = Math.round(v * 100) / 100;
+  let v = NaN;
+  let m = /(?:IMPORTE|MONTO|TOTAL)[^\d\n]{0,25}\$?\s*(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)/i.exec(t);
+  if(m) v = m[1].includes(",") ? importeFlexible(m[1]) : parseFloat(m[1].replace(/\./g, ""));
+  if(!m){
+    // "$ 819.589 69": los centavos pueden venir en superíndice (sin coma); si no aparecen, es importe entero
+    m = /\$\s*(\d{1,3}(?:\.\d{3})*)(?:[, \t]+(\d{2})\b)?/.exec(t);
+    if(m){ v = parseFloat(m[1].replace(/\./g, "") + (m[2] ? "." + m[2] : "")); if(!m[2]) out.importeSinCentavos = true; }
   }
+  if(v > 0) out.importe = Math.round(v * 100) / 100;
   // fecha dd/mm/aaaa → ISO para el campo de fecha
   m = /(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})/.exec(t);
   if(m && +m[2] >= 1 && +m[2] <= 12 && +m[1] >= 1 && +m[1] <= 31) out.fecha = `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
@@ -2566,7 +2612,7 @@ function parsearComprobante(texto){
   const lineas = t.split("\n");
   const idx = lineas.findIndex(l => /DESTINATARIO|BENEFICIARIO|RECEPTOR|A FAVOR DE|CUENTA DESTINO|^\s*PARA\s*:?\s*$/i.test(stripAccents(l).trim()));
   if(idx >= 0){
-    const bloque = stripAccents(lineas.slice(idx, idx + 2).join(" ")).toUpperCase();
+    const bloque = stripAccents(lineas.slice(idx, idx + 3).join(" ")).toUpperCase();
     const hit = TRANSF_INTEGRANTES.find(n => new RegExp("\\b" + stripAccents(n).toUpperCase() + "\\b").test(bloque));
     if(hit) out.integrante = hit;
   }
@@ -2580,8 +2626,9 @@ function parsearComprobante(texto){
     const c = /(?:CUIT|CUIL)\D{0,5}(\d{2})[-\s]?(\d{8})[-\s]?(\d)\b/i.exec(antesDest);
     if(c && ["20", "23", "24", "27"].includes(c[1])){
       out.cuil = `${c[1]}-${c[2]}-${c[3]}`;
-      out.dni = String(parseInt(c[2], 10));
-      out.dniDeCuil = true;
+      // el OCR puede leer mal un dígito: solo se completa el DNI si el CUIL pasa la verificación
+      if(cuitValido(c[1] + c[2] + c[3])){ out.dni = String(parseInt(c[2], 10)); out.dniDeCuil = true; }
+      else out.cuilDudoso = out.cuil;
     }
   }
   // nombre del ordenante (quien transfiere = el cliente)
@@ -2618,9 +2665,14 @@ async function procesarComprobante(archivo){
     } else {
       return set("⚠️ Formato no compatible. Usá un PDF o una imagen.", "#b91c1c");
     }
-    const cambios = aplicarComprobante(parsearComprobante(texto));
+    const d = parsearComprobante(texto);
+    const cambios = aplicarComprobante(d);
     if(!cambios.length) return set("⚠️ No encontré datos en el comprobante. Completá los campos a mano.", "#b91c1c");
-    set(`✓ Completé: ${cambios.join(", ")}. Revisá los datos antes de registrar; todo se puede editar.`, "#15803d");
+    const avisos = [];
+    if(d.cuilDudoso) avisos.push(`El CUIL leído (${d.cuilDudoso}) no pasa la verificación: el DNI no se completó.`);
+    if(d.importeSinCentavos) avisos.push("El importe se leyó sin centavos: verificá los centavos.");
+    const aviso = avisos.length ? " ⚠️ " + avisos.join(" ") : "";
+    set(`✓ Completé: ${cambios.join(", ")}. Revisá los datos antes de registrar; todo se puede editar.` + aviso, avisos.length ? "#b45309" : "#15803d");
   }catch(e){
     set("⚠️ " + (e && e.message ? e.message : e), "#b91c1c");
   }
