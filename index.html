@@ -2199,9 +2199,9 @@ function generarPDF(lista, opciones){
 let ARCHIVO = {};          // { id: {id, complementaria, fechaPago, anio, guardado, actualizado, filas:[...]} }
 let archivoListo = false;
 const TRANSF_ID = "__transferencias__";
-const TRANSF_INTEGRANTES = ["Diana", "Rubén", "Gabriel", "Damián", "Guillermo", "Roberta", "GESTORIA"];
+const TRANSF_INTEGRANTES = ["Diana", "Rubén", "Gabriel", "Damián", "Guillermo", "Roberta", "Fabiana", "GESTORIA"];
 // un color distinto por integrante (recuadros de la solapa TRANSFERENCIAS AL ESTUDIO)
-const TRANSF_COLOR = {"Diana": "#7c3aed", "Rubén": "#1e3a5f", "Gabriel": "#2563eb", "Damián": "#0d9488", "Guillermo": "#d97706", "Roberta": "#db2777", "GESTORIA": "#475569"};
+const TRANSF_COLOR = {"Diana": "#7c3aed", "Rubén": "#1e3a5f", "Gabriel": "#2563eb", "Damián": "#0d9488", "Guillermo": "#d97706", "Roberta": "#db2777", "Fabiana": "#4d7c0f", "GESTORIA": "#475569"};
 const GESTORIA_COMISION = 0.0325;
 let trResultados = [], trSel = null, trFiltroInt = "Todos";
 const ARCH_DB = "filtro_complementarias", ARCH_STORE = "archivo", ARCH_KEY = "todo";
@@ -2444,6 +2444,12 @@ function trFormHtml(){
   return `<div class="panel" id="trForm">
     <div><b style="font-size:16px;">💳 Transferencias a integrantes del estudio</b>
       <div class="sub" style="margin:4px 0 0;">Clientes que abonaron honorarios por transferencia bancaria a un integrante. Si lo vinculás a un actor de una complementaria, ese actor queda como ABONÓ y sale de CLIENTES DEUDORES.</div></div>
+    <div id="trCargaZona" tabindex="0" style="margin-top:12px;border:2px dashed #94a3b8;border-radius:10px;padding:12px;text-align:center;background:#f8fafc;cursor:pointer;">
+      <div style="font-weight:600;">📎 Cargar comprobante automáticamente</div>
+      <div class="sub" style="margin:4px 0;">Arrastrá un PDF o una imagen acá, hacé clic para elegir un archivo, o pegá una captura con <b>Ctrl+V</b>. Los datos se completan abajo y podés corregirlos antes de registrar.</div>
+      <input type="file" id="trCargaInput" accept="application/pdf,image/*" style="display:none;">
+      <div id="trCargaEstado" class="sub" style="margin-top:6px;"></div>
+    </div>
     <div class="tr-form" style="margin-top:12px;">
       <label>Buscar cliente (nombre o DNI)<input type="text" id="trBuscar" placeholder="Escribí al menos 2 letras"></label>
       <label>Actor de la complementaria<select id="trVincular"><option value="">— Sin vincular a una complementaria —</option></select></label>
@@ -2461,7 +2467,7 @@ function trFormHtml(){
       <div class="tr-radio-grupo"><span>¿Ya se repartió este dinero entre el estudio?</span><label class="tr-radio"><input type="radio" name="trFormRep" value="no" checked> No</label><label class="tr-radio"><input type="radio" name="trFormRep" value="si"> Sí</label></div>
     </div>
     <div id="trCalc" class="recibo-total"></div>
-    <div class="actions"><button id="trAgregar">💾 REGISTRAR TRANSFERENCIA</button></div>
+    <div class="actions"><button id="trAgregar">💾 REGISTRAR TRANSFERENCIA</button> <button id="trCancelarEdit" class="mini" style="display:none;">Cancelar edición</button></div>
     <div id="trMsg" class="cfg-msg"></div>
   </div>
   <div id="trCuentas"></div>
@@ -2491,7 +2497,159 @@ function engancharForm(){
   g("trImporte").addEventListener("input", trCalcular);
   g("trPct").addEventListener("input", trCalcular);
   g("trAgregar").addEventListener("click", registrarTransf);
+  g("trCancelarEdit").addEventListener("click", trCancelarEdicion);
+  engancharCarga();
   trCalcular();
+}
+
+// =====================================================================
+// CARGA AUTOMÁTICA DE COMPROBANTES (PDF, imagen o captura pegada con Ctrl+V)
+// Lee el texto (pdf.js para PDF con texto; OCR con Tesseract para imágenes y PDF escaneados)
+// y completa los campos del formulario. NUNCA registra sola: todo queda editable.
+// =====================================================================
+const TESSERACT_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+let _tesseractPromesa = null;
+function cargarTesseract(){
+  if(window.Tesseract) return Promise.resolve(window.Tesseract);
+  if(!_tesseractPromesa) _tesseractPromesa = new Promise((ok, mal) => {
+    const s = document.createElement("script");
+    s.src = TESSERACT_URL;
+    s.onload = () => ok(window.Tesseract);
+    s.onerror = () => { _tesseractPromesa = null; mal(new Error("No se pudo cargar el lector de imágenes. Revisá la conexión a internet.")); };
+    document.head.appendChild(s);
+  });
+  return _tesseractPromesa;
+}
+async function textoDeImagen(blob, set){
+  const T = await cargarTesseract();
+  const r = await T.recognize(blob, "spa+eng", {logger: m => {
+    if(m.status === "recognizing text") set(`Leyendo imagen… ${Math.round((m.progress || 0) * 100)}%`);
+  }});
+  return (r && r.data && r.data.text) || "";
+}
+async function textoDePdf(file){
+  const pdf = await pdfjsLib.getDocument({data: await file.arrayBuffer()}).promise;
+  const partes = [];
+  for(let p = 1; p <= pdf.numPages; p++){
+    const content = await (await pdf.getPage(p)).getTextContent();
+    partes.push(content.items.map(it => it.str + (it.hasEOL ? "\n" : " ")).join(""));
+  }
+  return partes.join("\n");
+}
+// PDF escaneado (sin texto): se dibuja la primera página y se lee como imagen
+async function textoDePdfEscaneado(file, set){
+  const pdf = await pdfjsLib.getDocument({data: await file.arrayBuffer()}).promise;
+  const page = await pdf.getPage(1);
+  const vp = page.getViewport({scale: 2});
+  const canvas = document.createElement("canvas");
+  canvas.width = vp.width; canvas.height = vp.height;
+  await page.render({canvasContext: canvas.getContext("2d"), viewport: vp}).promise;
+  const blob = await new Promise(r => canvas.toBlob(r, "image/png"));
+  return textoDeImagen(blob, set);
+}
+// Extrae de un texto: importe, fecha, quién recibe (integrante), DNI y nombre del ordenante
+function parsearComprobante(texto){
+  const t = String(texto || "").replace(/\r/g, "");
+  const out = {};
+  // importe: el que aparece junto a "importe/monto/total"; si no, el primer $ con centavos
+  // (los centavos pueden venir en superíndice, p. ej. "$ 819.589 69" → 819.589,69)
+  let m = /(?:IMPORTE|MONTO|TOTAL)[^\d\n]{0,25}\$?\s*(\d{1,3}(?:\.\d{3})*,\d{2}|\d+(?:[.,]\d{2})?)/i.exec(t)
+       || /\$\s*(\d{1,3}(?:\.\d{3})*)[,\s]?(\d{2})\b/.exec(t);
+  if(m){
+    const v = m[2] !== undefined ? parseFloat(m[1].replace(/\./g, "") + "." + m[2]) : importeFlexible(m[1]);
+    if(v > 0) out.importe = Math.round(v * 100) / 100;
+  }
+  // fecha dd/mm/aaaa → ISO para el campo de fecha
+  m = /(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})/.exec(t);
+  if(m && +m[2] >= 1 && +m[2] <= 12 && +m[1] >= 1 && +m[1] <= 31) out.fecha = `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+  // destinatario: buscamos el integrante solo en el renglón del destinatario (y el siguiente)
+  const lineas = t.split("\n");
+  const idx = lineas.findIndex(l => /DESTINATARIO|BENEFICIARIO|RECEPTOR|A FAVOR DE|CUENTA DESTINO|^\s*PARA\s*:?\s*$/i.test(stripAccents(l).trim()));
+  if(idx >= 0){
+    const bloque = stripAccents(lineas.slice(idx, idx + 2).join(" ")).toUpperCase();
+    const hit = TRANSF_INTEGRANTES.find(n => new RegExp("\\b" + stripAccents(n).toUpperCase() + "\\b").test(bloque));
+    if(hit) out.integrante = hit;
+  }
+  // DNI (si aparece como "DNI 12.345.678")
+  m = /\bDNI\D{0,10}(\d{1,2}(?:\.?\d{3}){2})\b/i.exec(t);
+  if(m) out.dni = m[1].replace(/\./g, "");
+  else {
+    // sin DNI explícito: se deduce del CUIT/CUIL del ordenante (los 8 dígitos del medio).
+    // Solo el tramo anterior al destinatario, para no tomar el CUIT de quien recibe.
+    const antesDest = idx >= 0 ? lineas.slice(0, idx).join("\n") : t;
+    const c = /(?:CUIT|CUIL)\D{0,5}(\d{2})[-\s]?(\d{8})[-\s]?(\d)\b/i.exec(antesDest);
+    if(c && ["20", "23", "24", "27"].includes(c[1])){
+      out.cuil = `${c[1]}-${c[2]}-${c[3]}`;
+      out.dni = String(parseInt(c[2], 10));
+      out.dniDeCuil = true;
+    }
+  }
+  // nombre del ordenante (quien transfiere = el cliente)
+  // (en el comprobante el ordenante aparece como "De:" seguido del nombre en el renglón siguiente)
+  m = /(?:^|\n)\s*(?:DE|ORDENANTE|REMITENTE|ORIGEN)\s*:?[ \t]*\n[ \t]*([^\n\d]{4,60})/i.exec(t)
+   || /(?:ORDENANTE|REMITENTE|ORIGEN)\s*:?[ \t]*([^\n\d]{4,60})/i.exec(t);
+  if(m) out.nombre = m[1].replace(/\s+/g, " ").trim();
+  return out;
+}
+function aplicarComprobante(d){
+  const g = id => document.getElementById(id);
+  const cambios = [];
+  if(d.importe){ g("trImporte").value = d.importe.toFixed(2).replace(".", ","); cambios.push("importe"); }
+  if(d.fecha){ g("trFecha").value = d.fecha; cambios.push("fecha"); }
+  if(d.integrante){ g("trIntegrante").value = d.integrante; g("trIntegrante").dispatchEvent(new Event("change")); cambios.push("quién recibe"); }
+  if(d.nombre && !g("trNombre").value.trim()){ g("trNombre").value = d.nombre; cambios.push("cliente"); }
+  if(d.dni && !g("trDni").value.trim()){ g("trDni").value = d.dni; cambios.push(d.dniDeCuil ? `DNI (del CUIL ${d.cuil})` : "DNI"); }
+  trCalcular();
+  return cambios;
+}
+async function procesarComprobante(archivo){
+  const estado = document.getElementById("trCargaEstado");
+  const set = (t, color) => { estado.style.color = color || ""; estado.textContent = t; };
+  try{
+    const esPdf = archivo.type === "application/pdf" || /\.pdf$/i.test(archivo.name || "");
+    let texto = "";
+    if(esPdf){
+      set("Leyendo PDF…");
+      texto = await textoDePdf(archivo);
+      if(texto.replace(/\s/g, "").length < 30){ set("El PDF no tiene texto seleccionable: lo leo como imagen…"); texto = await textoDePdfEscaneado(archivo, set); }
+    } else if(archivo.type.startsWith("image/")){
+      set("Leyendo imagen… (la primera vez tarda unos segundos)");
+      texto = await textoDeImagen(archivo, set);
+    } else {
+      return set("⚠️ Formato no compatible. Usá un PDF o una imagen.", "#b91c1c");
+    }
+    const cambios = aplicarComprobante(parsearComprobante(texto));
+    if(!cambios.length) return set("⚠️ No encontré datos en el comprobante. Completá los campos a mano.", "#b91c1c");
+    set(`✓ Completé: ${cambios.join(", ")}. Revisá los datos antes de registrar; todo se puede editar.`, "#15803d");
+  }catch(e){
+    set("⚠️ " + (e && e.message ? e.message : e), "#b91c1c");
+  }
+}
+function pegadoComprobante(e){
+  const img = [...((e.clipboardData && e.clipboardData.items) || [])].find(i => i.type.startsWith("image/"));
+  if(img){ e.preventDefault(); const f = img.getAsFile(); if(f) procesarComprobante(f); }
+}
+function engancharCarga(){
+  const zona = document.getElementById("trCargaZona");
+  const input = document.getElementById("trCargaInput");
+  zona.addEventListener("click", e => { if(e.target !== input) input.click(); });
+  input.addEventListener("change", () => { if(input.files[0]) procesarComprobante(input.files[0]); input.value = ""; });
+  zona.addEventListener("dragover", e => { e.preventDefault(); zona.style.borderColor = "#2563eb"; });
+  zona.addEventListener("dragleave", () => { zona.style.borderColor = "#94a3b8"; });
+  zona.addEventListener("drop", e => {
+    e.preventDefault(); zona.style.borderColor = "#94a3b8";
+    const f = e.dataTransfer.files[0]; if(f) procesarComprobante(f);
+  });
+  // Ctrl+V en cualquier parte de la solapa (salvo cuando se escribe en un campo de texto)
+  if(!window._pegadoTransfOK){
+    window._pegadoTransfOK = true;
+    document.addEventListener("paste", e => {
+      const tab = document.getElementById("tabTransf");
+      if(!tab || tab.style.display === "none" || !document.getElementById("trCargaZona")) return;
+      if(e.target && e.target.matches && e.target.matches("input,textarea,[contenteditable]")) return;
+      pegadoComprobante(e);
+    });
+  }
 }
 function trActualizarOpciones(){
   const q = stripAccents(document.getElementById("trBuscar").value || "").toUpperCase().trim();
@@ -2521,7 +2679,77 @@ function trCalcular(){
   const m = montosTransf({importe: imp, integrante: integ, comisionPct: pct});
   el.innerHTML = `Transferido a GESTORIA: <b>${fmtMoney(m.bruto)}</b> · Comisión ${String(pct).replace(".", ",")}%: <b>− ${fmtMoney(m.comision)}</b> · Neto después de la comisión: <b>${fmtMoney(m.neto)}</b>`;
 }
+// ---------- Editar una transferencia ya registrada ----------
+// Carga sus datos en el formulario (todo editable). Al guardar, actualiza el mismo registro.
+function trEditar(k){
+  const t = transfVivas().find(x => x._k === k); if(!t) return;
+  const g = id => document.getElementById(id);
+  window._trEditando = k;
+  g("trNombre").value = t.nombre || "";
+  g("trDni").value = t.dni || "";
+  g("trImporte").value = (+t.importe || 0).toFixed(2).replace(".", ",");
+  const [d, mo, y] = (t.fecha || "").split("/");
+  g("trFecha").value = y ? `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}` : "";
+  g("trIntegrante").value = t.integrante; g("trIntegrante").dispatchEvent(new Event("change"));
+  g("trJuzgado").value = t.juzgado ? String(t.juzgado) : "";
+  g("trTipo").value = t.tipo || "particular";
+  if(t.integrante === "GESTORIA") g("trPct").value = String(pctTransf(t)).replace(".", ",");
+  document.querySelector(`input[name="trFormEnt"][value="${t.entregado ? "si" : "no"}"]`).checked = true;
+  g("trAgregar").textContent = "💾 GUARDAR CAMBIOS";
+  g("trCancelarEdit").style.display = "";
+  g("trMsg").style.color = "#1d4ed8";
+  g("trMsg").textContent = `Editando la transferencia de ${t.nombre || "cliente"} (${fmtMoney(t.importe)}). Cambiá lo que necesites y tocá GUARDAR CAMBIOS.`;
+  g("trForm").scrollIntoView({behavior: "smooth", block: "start"});
+  trCalcular();
+}
+function trCancelarEdicion(){
+  const g = id => document.getElementById(id);
+  window._trEditando = null;
+  g("trAgregar").textContent = "💾 REGISTRAR TRANSFERENCIA";
+  g("trCancelarEdit").style.display = "none";
+  g("trMsg").textContent = "";
+  g("trNombre").value = ""; g("trDni").value = ""; g("trImporte").value = "";
+  trCalcular();
+}
+function actualizarTransf(){
+  const g = id => document.getElementById(id);
+  const msg = g("trMsg");
+  const fallo = t => { msg.style.color = "#b91c1c"; msg.textContent = "⚠️ " + t; };
+  const t = transfVivas().find(x => x._k === window._trEditando);
+  if(!t) { trCancelarEdicion(); return fallo("No encontré esa transferencia; se canceló la edición."); }
+  const importe = importeFlexible(g("trImporte").value || "");
+  const nombre = g("trNombre").value.trim();
+  const iso = g("trFecha").value;
+  if(!(importe > 0)) return fallo("Ingresá un importe mayor a cero.");
+  if(!nombre) return fallo("Falta el nombre del cliente.");
+  if(!iso) return fallo("Falta la fecha de pago.");
+  const integ = g("trIntegrante").value;
+  let comisionPct = null;
+  if(integ === "GESTORIA"){
+    const pct = trPctForm();
+    if(!(pct >= 0 && pct < 100)) return fallo("Ingresá un porcentaje válido para la gestoría (entre 0 y 100).");
+    comisionPct = Math.round(pct * 100) / 100;
+  }
+  const [y, m, d] = iso.split("-");
+  Object.assign(t, {
+    nombre, dni: g("trDni").value.trim(), integrante: integ,
+    importe: Math.round(importe * 100) / 100, fecha: `${d}/${m}/${y}`,
+    juzgado: g("trJuzgado").value || "", tipo: g("trTipo").value || "particular",
+    entregado: document.querySelector('input[name="trFormEnt"]:checked').value === "si",
+    mod: ahoraMs()
+  });
+  if(comisionPct != null) t.comisionPct = comisionPct; else delete t.comisionPct;
+  ARCHIVO[TRANSF_ID].mod = t.mod;
+  // si está vinculada a una complementaria, se actualiza esa fila con los nuevos datos
+  if(t.compId){ marcarAbonoPorTransf(t.compId, t.filaK, true); sincronizarFilaDesdeTransf(t); }
+  guardarArchivo();
+  trCancelarEdicion();
+  msg.style.color = "#15803d";
+  msg.textContent = "✓ Transferencia actualizada.";
+  refrescarVistasTransf();
+}
 function registrarTransf(){
+  if(window._trEditando) return actualizarTransf();
   const g = id => document.getElementById(id);
   const msg = g("trMsg");
   const fallo = t => { msg.style.color = "#b91c1c"; msg.textContent = "⚠️ " + t; };
@@ -2764,11 +2992,12 @@ function renderTransfLista(){
         return `<tr class="${clase}">
           <td>${esc(t.fecha)}</td><td><b>${esc(nombreLindo(t.nombre))}</b></td><td>${esc(t.dni || "")}</td><td>${esc(t.complementaria || "—")}</td>
           <td class="num">${fmtMoney(m.bruto)}</td>${esG ? `<td class="num">− ${fmtMoney(m.comision)} (${String(pctTransf(t)).replace(".", ",")}%)</td>` : ""}<td class="num">${fmtMoney(m.neto)}</td>
-          <td>${trEstado(t)}</td><td>${trEntHtml(t)}</td><td>${trRepHtml(t)}</td><td><button class="danger" data-trdel="${esc(t._k)}">Borrar</button></td></tr>${trRepAbiertas.has(t._k) ? `<tr><td colspan="${cols}" class="tr-rep-cel">${repartijaHtml(t)}</td></tr>` : ""}`;
+          <td>${trEstado(t)}</td><td>${trEntHtml(t)}</td><td>${trRepHtml(t)}</td><td><button class="mini" data-tredit="${esc(t._k)}">✏️ Editar</button> <button class="danger" data-trdel="${esc(t._k)}">Borrar</button></td></tr>${trRepAbiertas.has(t._k) ? `<tr><td colspan="${cols}" class="tr-rep-cel">${repartijaHtml(t)}</td></tr>` : ""}`;
       }).join("")}</tbody></table></div></div></div>`;
   });
   cont.innerHTML = filtroHtml + resumenHtml + html;
   cont.querySelector("#trFiltroInt").addEventListener("change", e => { trFiltroInt = e.target.value; renderTransfLista(); });
+  cont.querySelectorAll("[data-tredit]").forEach(b => b.addEventListener("click", () => trEditar(b.dataset.tredit)));
   cont.querySelectorAll("[data-ccopiar]").forEach(b => b.addEventListener("click", () => {
     const c = cuentaPorKey(b.dataset.ccopiar); if(c) copiarTexto(textoCuentaCliente(c), b);
   }));
