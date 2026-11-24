@@ -462,6 +462,7 @@
   <button class="tab" data-tab="tabArchivo">📚 COMPLEMENTARIAS POR AÑO <span id="archCount" class="tab-count"></span></button>
   <button class="tab" data-tab="tabDeudores">💸 CLIENTES DEUDORES <span id="deuCount" class="tab-count deu"></span></button>
   <button class="tab" data-tab="tabTransf">💳 TRANSFERENCIAS AL ESTUDIO</button>
+  <button class="tab" data-tab="tabEmbargos">⚖️ EMBARGOS</button>
   <button class="secondary mini" id="btnBloquear" style="margin-left:auto; align-self:center;" title="Cierra el programa; para volver a entrar pide la contraseña">🔒 Bloquear</button>
 </div>
 <div id="tabFiltro">
@@ -512,6 +513,7 @@
 <div id="tabArchivo" style="display:none;"></div>
 <div id="tabDeudores" style="display:none;"></div>
 <div id="tabTransf" style="display:none;"></div>
+<div id="tabEmbargos" style="display:none;"></div>
 <div id="printArea"></div>
 
 <script>
@@ -2246,7 +2248,7 @@ function migrarArchivo(A){
 }
 const ahoraMs = () => Date.now();
 function filasVivas(c){ return ordenarFilasAlfabetico((c.filas || []).filter(f => !f.borrado)); }
-function compsVivas(){ return Object.values(ARCHIVO).filter(c => !c.borrado && c.id !== CEL_ID && c.id !== TRANSF_ID && c.id !== CUENTAS_ID); }
+function compsVivas(){ return Object.values(ARCHIVO).filter(c => !c.borrado && c.id !== CEL_ID && c.id !== TRANSF_ID && c.id !== CUENTAS_ID && c.id !== EMB_ID); }
 let _guardarTimer = null;
 let _desdeNube = false;   // true cuando el guardado local viene de una bajada de la nube (no hace falta volver a subir)
 function guardarArchivo(){
@@ -2541,6 +2543,27 @@ async function centavosDelImporte(blob, palabras, worker){
   const d = ((data && data.text) || "").replace(/\D/g, "");
   return {imp, cents: d.length === 2 ? d : null};
 }
+// El CUIT del ordenante también puede salir con un dígito mal: se relee su recuadro (dígitos y guiones)
+// y solo se acepta la lectura si el dígito verificador cierra.
+async function cuitDelOrdenante(blob, palabras, worker){
+  const w = palabras.find(x => /^\d{2}-\d{8}-\d$/.test((x.text || "").trim()));
+  if(!w) return null;
+  const b = w.bbox, ancho = b.x1 - b.x0, alto = b.y1 - b.y0;
+  const sx = b.x0 - 4, sw = ancho + 8, sy = b.y0 - 6, sh = alto + 12;
+  const bmp = await createImageBitmap(blob);
+  const k = 8, pad = 60;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(sw * k) + 2 * pad; canvas.height = Math.round(sh * k) + 2 * pad;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(bmp, sx, sy, sw, sh, pad, pad, Math.round(sw * k), Math.round(sh * k));
+  if(bmp.close) bmp.close();
+  await worker.setParameters({tessedit_pageseg_mode: "7", tessedit_char_whitelist: "0123456789-"});
+  const {data} = await worker.recognize(canvas);
+  return {w, leido: ((data && data.text) || "").replace(/\s/g, "")};
+}
+
 async function textoDeImagen(blob, set){
   const T = await cargarTesseract();
   const opts = typeof TESS_LOCAL !== "undefined" ? TESS_LOCAL : {};
@@ -2554,6 +2577,13 @@ async function textoDeImagen(blob, set){
     if(c && c.cents){
       const importe = c.imp.text.trim();
       texto = texto.replace(importe, importe + "," + c.cents);
+    }
+    const cu = await cuitDelOrdenante(blob, (r && r.data && r.data.words) || [], worker);
+    if(cu && /^\d{2}-?\d{8}-?\d$/.test(cu.leido)){
+      const n = cu.leido.replace(/-/g, "");
+      if(cuitValido(n) && n !== cu.w.text.replace(/-/g, "")){
+        texto = texto.replace(cu.w.text.trim(), `${n.slice(0, 2)}-${n.slice(2, 10)}-${n.slice(10)}`);
+      }
     }
     return texto;
   } finally {
@@ -2703,10 +2733,141 @@ function engancharCarga(){
     });
   }
 }
+// =====================================================================
+// EMBARGOS (pestaña ⚖️): casos donde el estudio cobra por embargo.
+// Se cargan a mano. Se reparten y sincronizan con TRANSFERENCIAS igual que las complementarias:
+// usan la misma base (ARCHIVO) y las mismas funciones de vinculación (compId = EMB_ID).
+// El honorario es 15% o 20% del monto embargado, a elegir en cada caso.
+// =====================================================================
+const EMB_ID = "__embargos__";
+function asegurarEmb(){
+  if(!ARCHIVO[EMB_ID]) ARCHIVO[EMB_ID] = {id: EMB_ID, complementaria: "EMBARGO", anio: "", fechaPago: "", mod: ahoraMs(), filas: []};
+  return ARCHIVO[EMB_ID];
+}
+function embFilasVivas(){ const c = ARCHIVO[EMB_ID]; return c && !c.borrado ? (c.filas || []).filter(f => !f.borrado) : []; }
+function embHon(f){ return Math.round((+f.bruto || 0) * (f.pct === 15 ? 15 : 20)) / 100; }
+function embMsgTxt(t, err){
+  const m = document.getElementById("embMsg"); if(!m) return;
+  m.style.color = err ? "#b91c1c" : "#15803d"; m.textContent = (err ? "⚠️ " : "✓ ") + t;
+}
+function renderEmbargos(){
+  const cont = document.getElementById("tabEmbargos");
+  if(!cont) return;
+  if(!archivoListo){ cont.innerHTML = '<div class="panel">Cargando…</div>'; return; }
+  asegurarEmb();
+  const filas = embFilasVivas().slice().sort((a, b) => (a.name || "").localeCompare(b.name || "", "es"));
+  const totBruto = filas.reduce((s, f) => s + (+f.bruto || 0), 0);
+  const totHon = filas.reduce((s, f) => s + embHon(f), 0);
+  const pendHon = filas.filter(f => f.hon !== "abono").reduce((s, f) => s + embHon(f), 0);
+  const juzOpts = sel => [1,2,3,4,5,6,7,8,9,10].map(n => `<option value="${n}" ${String(sel) === String(n) ? "selected" : ""}>${n}</option>`).join("");
+  const fila = f => {
+    const k = esc(f._k);
+    const abonado = f.hon === "abono";
+    const transf = transfsDeFila(EMB_ID, f._k).length > 0;
+    const resp = (typeof REP_RESPONSABLE !== "undefined" && REP_RESPONSABLE[f.juzgado]) || "—";
+    return `<tr class="${abonado ? "pagado" : ""}">
+      <td><input data-emb="name" data-k="${k}" value="${esc(f.name || "")}" style="width:170px;"></td>
+      <td><input data-emb="docnum" data-k="${k}" value="${esc(f.docnum || "")}" style="width:90px;"></td>
+      <td><select data-emb="juzgado" data-k="${k}"><option value="">—</option>${juzOpts(f.juzgado)}</select></td>
+      <td><input data-emb="expte" data-k="${k}" value="${esc(f.expte || "")}" style="width:110px;"></td>
+      <td class="num"><input data-emb="bruto" data-k="${k}" value="${esc(f.bruto ? (+f.bruto).toFixed(2).replace(".", ",") : "")}" style="width:110px;text-align:right;"></td>
+      <td><select data-emb="pct" data-k="${k}"><option value="15" ${f.pct === 15 ? "selected" : ""}>15%</option><option value="20" ${f.pct !== 15 ? "selected" : ""}>20%</option></select></td>
+      <td class="num"><b>${fmtMoney(embHon(f))}</b></td>
+      <td><label class="chk ok"><input type="checkbox" data-emb="abono" data-k="${k}" ${abonado ? "checked" : ""}> ABONÓ HONORARIOS</label></td>
+      <td>${transf ? '<span class="bdg ok">✓ transferido</span>' : '<span class="muted">—</span>'}</td>
+      <td><label><input type="checkbox" data-emb="contador" data-k="${k}" ${f.contador ? "checked" : ""}> Contador</label></td>
+      <td><label><input type="checkbox" data-emb="rep" data-k="${k}" ${f.rep ? "checked" : ""} ${abonado ? "" : "disabled"}> Repartido</label></td>
+      <td>${esc(resp)}</td>
+      <td><input data-emb="comentarios" data-k="${k}" value="${esc(f.comentarios || "")}" style="width:160px;"></td>
+      <td><button class="danger" data-embdel="${k}">Borrar</button></td></tr>`;
+  };
+  cont.innerHTML = `
+    <div class="panel">
+      <div><b style="font-size:16px;">⚖️ Embargos</b>
+        <div class="sub" style="margin:4px 0 0;">Casos donde el estudio cobra por embargo. Se reparten igual que las complementarias. Podés elegir 15% o 20% en cada caso y editar cualquier dato.</div></div>
+      <div class="tr-form" style="margin-top:12px;">
+        <label>Cliente<input type="text" id="embNombre" placeholder="Apellido y nombre"></label>
+        <label>DNI<input type="text" id="embDni"></label>
+        <label>Juzgado<select id="embJuzgado"><option value="">—</option>${juzOpts("")}</select></label>
+        <label>Expediente<input type="text" id="embExpte"></label>
+        <label>Monto embargado<input type="text" id="embBruto" placeholder="0,00"></label>
+        <label>Honorario<select id="embPct"><option value="15">15%</option><option value="20" selected>20%</option></select></label>
+      </div>
+      <div class="actions"><button id="embAgregar">💾 AGREGAR EMBARGO</button></div>
+      <div id="embMsg" class="cfg-msg"></div>
+    </div>
+    <div class="panel" style="margin-top:10px;">
+      <div class="deu-resumen">
+        <div><span>Total embargado</span><b>${fmtMoney(totBruto)}</b></div>
+        <div><span>Honorarios</span><b>${fmtMoney(totHon)}</b></div>
+        <div><span>Pendiente de ABONÓ</span><b style="color:${pendHon > 0 ? "#b91c1c" : "#15803d"};">${fmtMoney(pendHon)}</b></div>
+      </div>
+      <div style="overflow-x:auto;margin-top:10px;">
+        ${filas.length ? `<table><thead><tr><th>Cliente</th><th>DNI</th><th>Juzgado</th><th>Expediente</th><th>Monto embargado</th><th>%</th><th>Honorarios</th><th>Abonó</th><th>Transferencia</th><th>Contador</th><th>Repartido</th><th>Responsable</th><th>Comentarios</th><th></th></tr></thead><tbody>${filas.map(fila).join("")}</tbody></table>` : '<div class="muted" style="padding:10px;">Todavía no hay embargos cargados.</div>'}
+      </div>
+    </div>`;
+  document.getElementById("embAgregar").addEventListener("click", embAgregar);
+  cont.querySelectorAll("[data-emb]").forEach(el => el.addEventListener("change", () => embCambiar(el)));
+  cont.querySelectorAll("[data-embdel]").forEach(b => b.addEventListener("click", () => embBorrar(b.dataset.embdel)));
+}
+function embAgregar(){
+  const g = id => document.getElementById(id);
+  const bruto = importeFlexible(g("embBruto").value || "");
+  const nombre = g("embNombre").value.trim();
+  if(!nombre) return embMsgTxt("Falta el nombre del cliente.", true);
+  if(!(bruto > 0)) return embMsgTxt("Ingresá el monto embargado.", true);
+  const ms = ahoraMs();
+  const f = {_k: "E" + ms + "-" + Math.random().toString(36).slice(2, 7), mod: ms, name: nombre,
+             docnum: g("embDni").value.trim(), juzgado: g("embJuzgado").value || "", expte: g("embExpte").value.trim(),
+             bruto: Math.round(bruto * 100) / 100, pct: +g("embPct").value === 15 ? 15 : 20, hon: "", comentarios: ""};
+  const c = asegurarEmb(); c.filas.push(f); c.mod = ms;
+  guardarArchivo();
+  renderEmbargos();
+  embMsgTxt("Embargo agregado. Ya podés vincularlo en TRANSFERENCIAS AL ESTUDIO.");
+  try{ if(document.getElementById("tabTransf").style.display !== "none") renderTransf(); }catch(_){}
+}
+function embCambiar(el){
+  const c = asegurarEmb();
+  const i = c.filas.findIndex(x => x._k === el.dataset.k && !x.borrado); if(i < 0) return;
+  const f = c.filas[i], k = f._k, campo = el.dataset.emb;
+  const cambios = {};
+  if(campo === "abono"){
+    if(!el.checked && transfsDeFila(EMB_ID, k).length){ el.checked = true; return embMsgTxt("Tiene transferencias cargadas: borralas en TRANSFERENCIAS para desmarcar.", true); }
+    cambios.hon = el.checked ? "abono" : "";
+    if(!el.checked) cambios.rep = false;
+  } else if(campo === "contador"){ cambios.contador = el.checked; }
+  else if(campo === "rep"){ if(f.hon !== "abono"){ el.checked = false; return embMsgTxt("Primero marcá ABONÓ.", true); } cambios.rep = el.checked; }
+  else if(campo === "bruto"){
+    const v = importeFlexible(el.value || "");
+    if(!(v > 0)) return embMsgTxt("Monto inválido.", true);
+    cambios.bruto = Math.round(v * 100) / 100;
+  }
+  else if(campo === "pct"){ cambios.pct = +el.value === 15 ? 15 : 20; }
+  else if(campo === "juzgado"){ cambios.juzgado = el.value; }
+  else { cambios[campo] = el.value.trim(); }   // name, docnum, expte, comentarios
+  c.filas[i] = Object.assign({}, f, cambios, {mod: ahoraMs()});
+  c.mod = ahoraMs();
+  guardarArchivo();
+  renderEmbargos();
+  try{ if(document.getElementById("tabTransf").style.display !== "none") renderTransf(); }catch(_){}
+}
+function embBorrar(k){
+  const c = asegurarEmb();
+  const i = c.filas.findIndex(x => x._k === k && !x.borrado); if(i < 0) return;
+  if(transfsDeFila(EMB_ID, k).length) return embMsgTxt("No se puede borrar: tiene transferencias cargadas (borralas en TRANSFERENCIAS).", true);
+  c.filas[i] = Object.assign({}, c.filas[i], {borrado: true, mod: ahoraMs()});
+  c.mod = ahoraMs();
+  guardarArchivo();
+  renderEmbargos();
+}
+
 function trActualizarOpciones(){
   const q = stripAccents(document.getElementById("trBuscar").value || "").toUpperCase().trim();
   trResultados = [];
   if(q.length >= 2){
+    if(ARCHIVO[EMB_ID]) embFilasVivas().forEach(f => {
+      if(stripAccents(f.name || "").toUpperCase().includes(q) || (f.docnum || "").includes(q)) trResultados.push({c: ARCHIVO[EMB_ID], f});
+    });
     compsVivas().forEach(c => (c.filas || []).forEach(f => {
       if(f.borrado) return;
       if(stripAccents(f.name || "").toUpperCase().includes(q) || (f.docnum || "").includes(q)) trResultados.push({c, f});
@@ -3255,7 +3416,7 @@ function renderCuentas(){
   const cont = document.getElementById("trCuentas"); if(!cont) return;
   cont.innerHTML = `<div class="panel">
     <div class="tr-cuentas-h" id="trCuentasToggle" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;">
-      <b style="font-size:16px;">${trCuentasAbiertas ? "▾" : "▸"} 🏦 Cuentas de cobro de los integrantes</b>
+      <b style="font-size:16px;">${trCuentasAbiertas ? "▾" : "▸"} 🏦 HACER CLICK AQUI PARA VISUALIZAR TODAS LAS CUENTAS DE COBRO DEL ESTUDIO</b>
       <span class="muted" style="font-size:12px;">${trCuentasAbiertas ? "Tocá para contraer" : "Tocá para ver las cuentas"}</span></div>
     ${trCuentasAbiertas ? `<div class="sub" style="margin:4px 0 0;">Cada integrante puede tener varias cuentas. La marcada con ⭐ es la de por defecto, y podés cambiarla. Los datos quedan guardados y se editan cuando quieras.</div>
     <div class="tr-cuentas">${TRANSF_INTEGRANTES.map(n => {
@@ -3279,10 +3440,11 @@ function renderCuentas(){
 // ---------- pestañas ----------
 document.querySelectorAll(".tabs .tab").forEach(b => b.addEventListener("click", () => {
   document.querySelectorAll(".tabs .tab").forEach(x => x.classList.toggle("active", x === b));
-  ["tabFiltro", "tabArchivo", "tabDeudores", "tabTransf"].forEach(t => document.getElementById(t).style.display = b.dataset.tab === t ? "" : "none");
+  ["tabFiltro", "tabArchivo", "tabDeudores", "tabTransf", "tabEmbargos"].forEach(t => document.getElementById(t).style.display = b.dataset.tab === t ? "" : "none");
   if(b.dataset.tab === "tabArchivo") renderArchivo();
   if(b.dataset.tab === "tabDeudores") renderDeudores();
   if(b.dataset.tab === "tabTransf") renderTransf();
+  if(b.dataset.tab === "tabEmbargos") renderEmbargos();
 }));
 
 let archBusqueda = "";
