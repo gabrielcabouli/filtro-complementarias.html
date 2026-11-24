@@ -2205,7 +2205,7 @@ const TRANSF_INTEGRANTES = ["Diana", "Rubén", "Gabriel", "Damián", "Guillermo"
 // un color distinto por integrante (recuadros de la solapa TRANSFERENCIAS AL ESTUDIO)
 const TRANSF_COLOR = {"Diana": "#7c3aed", "Rubén": "#1e3a5f", "Gabriel": "#2563eb", "Damián": "#0d9488", "Guillermo": "#d97706", "Roberta": "#db2777", "Fabiana": "#4d7c0f", "GESTORIA": "#475569"};
 const GESTORIA_COMISION = 0.0325;
-let trResultados = [], trSel = null, trFiltroInt = "Todos";
+let trResultados = [], trSel = null, trFiltroInt = "Todos", trFiltroOrigen = "Todos";
 const ARCH_DB = "filtro_complementarias", ARCH_STORE = "archivo", ARCH_KEY = "todo";
 
 function abrirDB(){
@@ -2462,6 +2462,9 @@ function trFormHtml(){
         <select id="trIntegrante" style="display:none;">${TRANSF_INTEGRANTES.map(n => `<option value="${n}">${n}</option>`).join("")}</select></div>
       <label>Importe transferido<input type="text" id="trImporte" placeholder="0,00"></label>
       <label>Juzgado (para repartir)<select id="trJuzgado"><option value="">—</option>${[1,2,3,4,5,6,7,8,9,10].map(n => `<option value="${n}">${n}</option>`).join("")}</select></label>
+      <label>N° de expediente<input type="text" id="trExpte" placeholder="Ej: 12345/2024"></label>
+      <label>Carátula<input type="text" id="trCaratula" placeholder="Ej: PEREZ c/ CAJA s/ ..."></label>
+      <label>Decreto (nº o fecha)<input type="text" id="trDecreto"></label>
       <label>Tipo de cliente<select id="trTipo"><option value="particular">Particular</option><option value="mutual">Mutual (9%)</option></select></label>
       <label id="trPctWrap">% que retiene la gestoría<input type="text" id="trPct" value="3,25"></label>
       <label>Fecha de la transferencia<input type="date" id="trFecha" value="${hoyISO}"></label>
@@ -2527,6 +2530,12 @@ function cargarTesseract(){
 async function centavosDelImporte(blob, palabras, worker){
   const imp = palabras.find(w => /^\d{1,3}(\.\d{3})+$/.test((w.text || "").trim()));
   if(!imp) return null;
+  // a veces el OCR deja los centavos como palabra propia, a la derecha del importe y arriba
+  const hI = imp.bbox.y1 - imp.bbox.y0, wI = imp.bbox.x1 - imp.bbox.x0;
+  const cercano = palabras.find(w2 => /^\d{2}$/.test((w2.text || "").trim()) && w2.bbox
+    && w2.bbox.x0 >= imp.bbox.x1 - 0.15 * wI && w2.bbox.x0 <= imp.bbox.x1 + hI
+    && w2.bbox.y1 <= imp.bbox.y0 + 0.7 * hI);
+  if(cercano) return {imp, cents: cercano.text.trim()};
   const b = imp.bbox, ancho = b.x1 - b.x0, alto = b.y1 - b.y0;
   const sx = b.x1 - ancho * 0.12, sw = ancho * 0.12 + 8, sy = b.y0 - 2, sh = alto * 0.5 + 4;
   const bmp = await createImageBitmap(blob);
@@ -2627,7 +2636,7 @@ function parsearComprobante(texto){
   // importe: el que aparece junto a "importe/monto/total"; si no, el primer $ con centavos
   // (los centavos pueden venir en superíndice, p. ej. "$ 819.589 69" → 819.589,69)
   let v = NaN;
-  let m = /(?:IMPORTE|MONTO|TOTAL)[^\d\n]{0,25}\$?\s*(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)/i.exec(t);
+  let m = /(?:IMPORTE|MONTO|TOTAL|TRANSFERI\w*|DEBITAD\w*|SUMA)[^\d\n]{0,25}\$?\s*(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)/i.exec(t);
   if(m) v = m[1].includes(",") ? importeFlexible(m[1]) : parseFloat(m[1].replace(/\./g, ""));
   if(!m){
     // "$ 819.589 69": los centavos pueden venir en superíndice (sin coma); si no aparecen, es importe entero
@@ -2636,11 +2645,11 @@ function parsearComprobante(texto){
   }
   if(v > 0) out.importe = Math.round(v * 100) / 100;
   // fecha dd/mm/aaaa → ISO para el campo de fecha
-  m = /(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})/.exec(t);
-  if(m && +m[2] >= 1 && +m[2] <= 12 && +m[1] >= 1 && +m[1] <= 31) out.fecha = `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+  m = /(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4}|\d{2})\b/.exec(t);
+  if(m && +m[2] >= 1 && +m[2] <= 12 && +m[1] >= 1 && +m[1] <= 31) out.fecha = `${m[3].length === 2 ? "20" + m[3] : m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
   // destinatario: buscamos el integrante solo en el renglón del destinatario (y el siguiente)
   const lineas = t.split("\n");
-  const idx = lineas.findIndex(l => /DESTINATARIO|BENEFICIARIO|RECEPTOR|A FAVOR DE|CUENTA DESTINO|^\s*PARA\s*:?\s*$/i.test(stripAccents(l).trim()));
+  const idx = lineas.findIndex(l => /DESTINATARIO|BENEFICIARIO|RECEPTOR|A FAVOR DE|CUENTA DESTINO|ENVIADO A|^\s*PARA\s*:?\s*$|^\s*A\s*:?\s*$/i.test(stripAccents(l).trim()));
   if(idx >= 0){
     const bloque = stripAccents(lineas.slice(idx, idx + 3).join(" ")).toUpperCase();
     const hit = TRANSF_INTEGRANTES.find(n => new RegExp("\\b" + stripAccents(n).toUpperCase() + "\\b").test(bloque));
@@ -2663,7 +2672,7 @@ function parsearComprobante(texto){
   }
   // nombre del ordenante (quien transfiere = el cliente)
   // (en el comprobante el ordenante aparece como "De:" seguido del nombre en el renglón siguiente)
-  m = /(?:^|\n)\s*(?:DE|ORDENANTE|REMITENTE|ORIGEN)\s*:?[ \t]*\n[ \t]*([^\n\d]{4,60})/i.exec(t)
+  m = /(?:^|\n)\s*(?:DE|ORDENANTE|REMITENTE|ORIGEN|ENVIADO POR|DESDE|TITULAR CUENTA ORIGEN|TITULAR CUENTA DEBITO)\s*:?[ \t]*\n[ \t]*([^\n\d]{4,60})/i.exec(t)
    || /(?:ORDENANTE|REMITENTE|ORIGEN)\s*:?[ \t]*([^\n\d]{4,60})/i.exec(t);
   if(m) out.nombre = m[1].replace(/\s+/g, " ").trim();
   return out;
@@ -2937,6 +2946,7 @@ function trEditar(k){
   g("trFecha").value = y ? `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}` : "";
   g("trIntegrante").value = t.integrante; g("trIntegrante").dispatchEvent(new Event("change"));
   g("trJuzgado").value = t.juzgado ? String(t.juzgado) : "";
+  g("trExpte").value = t.expte || ""; g("trCaratula").value = t.caratula || ""; g("trDecreto").value = t.decreto || "";
   g("trTipo").value = t.tipo || "particular";
   if(t.integrante === "GESTORIA") g("trPct").value = String(pctTransf(t)).replace(".", ",");
   document.querySelector(`input[name="trFormEnt"][value="${t.entregado ? "si" : "no"}"]`).checked = true;
@@ -2954,6 +2964,7 @@ function trCancelarEdicion(){
   g("trCancelarEdit").style.display = "none";
   g("trMsg").textContent = "";
   g("trNombre").value = ""; g("trDni").value = ""; g("trImporte").value = "";
+  g("trExpte").value = ""; g("trCaratula").value = ""; g("trDecreto").value = "";
   trCalcular();
 }
 function actualizarTransf(){
@@ -2980,6 +2991,7 @@ function actualizarTransf(){
     nombre, dni: g("trDni").value.trim(), integrante: integ,
     importe: Math.round(importe * 100) / 100, fecha: `${d}/${m}/${y}`,
     juzgado: g("trJuzgado").value || "", tipo: g("trTipo").value || "particular",
+    expte: g("trExpte").value.trim(), caratula: g("trCaratula").value.trim(), decreto: g("trDecreto").value.trim(),
     entregado: document.querySelector('input[name="trFormEnt"]:checked').value === "si",
     mod: ahoraMs()
   });
@@ -2992,6 +3004,15 @@ function actualizarTransf(){
   msg.style.color = "#15803d";
   msg.textContent = "✓ Transferencia actualizada.";
   refrescarVistasTransf();
+}
+function trEsEmbargo(t){ return t.compId === EMB_ID; }
+function trCausaHtml(t){
+  if(!(t.expte || t.caratula || t.decreto)) return "";
+  const p = [];
+  if(t.expte) p.push("Expte. " + esc(t.expte));
+  if(t.caratula) p.push(esc(t.caratula));
+  if(t.decreto) p.push("Decreto " + esc(t.decreto));
+  return `<div style="font-size:12px;color:#475569;margin-top:2px;">⚖️ ${p.join(" · ")}</div>`;
 }
 function registrarTransf(){
   if(window._trEditando) return actualizarTransf();
@@ -3011,6 +3032,7 @@ function registrarTransf(){
              fecha: `${d}/${m}/${y}`, complementaria: "", compId: "", filaK: ""};
   t.repartido = document.querySelector('input[name="trFormRep"]:checked').value === "si";
   t.juzgado = g("trJuzgado").value || "";
+  t.expte = g("trExpte").value.trim(); t.caratula = g("trCaratula").value.trim(); t.decreto = g("trDecreto").value.trim();
   t.entregado = document.querySelector('input[name="trFormEnt"]:checked').value === "si";
   t.tipo = g("trTipo").value || "particular";
   if(t.integrante === "GESTORIA"){
@@ -3190,7 +3212,7 @@ async function revisarAvisosDeudores(){
 setInterval(revisarAvisosDeudores, 60 * 60 * 1000);
 function renderTransfLista(){
   const cont = document.getElementById("trLista");
-  const lista = transfVivas();
+  const lista = transfVivas().filter(t => trFiltroOrigen === "Todos" || (trFiltroOrigen === "Embargos") === trEsEmbargo(t));
   const av = avisosDeudores();
   const pendTot = lista.filter(t => !estadoRepTransf(t)).reduce((s, t) => s + montosTransf(t).neto, 0);
   const grupos = TRANSF_INTEGRANTES.filter(n => trFiltroInt === "Todos" || trFiltroInt === n);
@@ -3205,7 +3227,7 @@ function renderTransfLista(){
       }).join("")}
     </div>` : "";
   const filtroHtml = `<div class="tr-filtro"><span id="trEstado" class="muted" style="font-size:12px;margin-right:12px;">${esc(_trEstadoTxt || "Cada cambio se guarda solo.")}</span><label>Ver integrante:
-      <select id="trFiltroInt">${["Todos", ...TRANSF_INTEGRANTES].map(o => `<option value="${o}" ${trFiltroInt === o ? "selected" : ""}>${o}</option>`).join("")}</select></label></div>`;
+      <select id="trFiltroInt">${["Todos", ...TRANSF_INTEGRANTES].map(o => `<option value="${o}" ${trFiltroInt === o ? "selected" : ""}>${o}</option>`).join("")}</select></label> <label>Origen:<select id="trFiltroOrigen"><option value="Todos" ${trFiltroOrigen === "Todos" ? "selected" : ""}>Todos</option><option value="Embargos" ${trFiltroOrigen === "Embargos" ? "selected" : ""}>Solo embargos</option><option value="Complementarias" ${trFiltroOrigen === "Complementarias" ? "selected" : ""}>Solo complementarias</option></select></label></div>`;
   let html = "";
   if(!lista.length) html = `<div class="panel" style="text-align:center;color:var(--muted);">Todavía no hay transferencias registradas.</div>`;
   grupos.forEach(n => {
@@ -3235,13 +3257,14 @@ function renderTransfLista(){
         const m = montosTransf(t);
         const clase = estadoRepTransf(t) ? "tr-rep" : (t.entregado ? "tr-ent" : "");
         return `<tr class="${clase}">
-          <td>${esc(t.fecha)}</td><td><b>${esc(nombreLindo(t.nombre))}</b></td><td>${esc(t.dni || "")}</td><td>${esc(t.complementaria || "—")}</td>
+          <td>${esc(t.fecha)}</td><td><b>${esc(nombreLindo(t.nombre))}</b></td><td>${esc(t.dni || "")}</td><td>${trEsEmbargo(t) ? '<span style="background:#7c2d12;color:#fff;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:700;">⚖️ EMBARGO</span> ' : ""}${esc(t.complementaria || "—")}${trCausaHtml(t)}</td>
           <td class="num">${fmtMoney(m.bruto)}</td>${esG ? `<td class="num">− ${fmtMoney(m.comision)} (${String(pctTransf(t)).replace(".", ",")}%)</td>` : ""}<td class="num">${fmtMoney(m.neto)}</td>
           <td>${trEstado(t)}</td><td>${trEntHtml(t)}</td><td>${trRepHtml(t)}</td><td><button class="mini" data-tredit="${esc(t._k)}">✏️ Editar</button> <button class="danger" data-trdel="${esc(t._k)}">Borrar</button></td></tr>${trRepAbiertas.has(t._k) ? `<tr><td colspan="${cols}" class="tr-rep-cel">${repartijaHtml(t)}</td></tr>` : ""}`;
       }).join("")}</tbody></table></div></div></div>`;
   });
   cont.innerHTML = filtroHtml + resumenHtml + html;
   cont.querySelector("#trFiltroInt").addEventListener("change", e => { trFiltroInt = e.target.value; renderTransfLista(); });
+  cont.querySelector("#trFiltroOrigen").addEventListener("change", e => { trFiltroOrigen = e.target.value; renderTransfLista(); });
   cont.querySelectorAll("[data-tredit]").forEach(b => b.addEventListener("click", () => trEditar(b.dataset.tredit)));
   cont.querySelectorAll("[data-ccopiar]").forEach(b => b.addEventListener("click", () => {
     const c = cuentaPorKey(b.dataset.ccopiar); if(c) copiarTexto(textoCuentaCliente(c), b);
