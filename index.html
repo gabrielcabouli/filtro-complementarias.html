@@ -2764,11 +2764,11 @@ function renderEmbargos(){
     const k = esc(f._k);
     const abonado = f.hon === "abono";
     const transf = transfsDeFila(EMB_ID, f._k).length > 0;
-    const resp = (typeof REP_RESPONSABLE !== "undefined" && REP_RESPONSABLE[f.juzgado]) || "—";
     return `<tr class="${abonado ? "pagado" : ""}">
       <td><input data-emb="name" data-k="${k}" value="${esc(f.name || "")}" style="width:170px;"></td>
       <td><input data-emb="docnum" data-k="${k}" value="${esc(f.docnum || "")}" style="width:90px;"></td>
       <td><select data-emb="juzgado" data-k="${k}"><option value="">—</option>${juzOpts(f.juzgado)}</select></td>
+      <td><select data-emb="tipo" data-k="${k}"><option value="particular" ${f.tipo === "mutual" ? "" : "selected"}>Particular</option><option value="mutual" ${f.tipo === "mutual" ? "selected" : ""}>Mutual 9%</option></select></td>
       <td><input data-emb="expte" data-k="${k}" value="${esc(f.expte || "")}" style="width:110px;"></td>
       <td class="num"><input data-emb="bruto" data-k="${k}" value="${esc(f.bruto ? (+f.bruto).toFixed(2).replace(".", ",") : "")}" style="width:110px;text-align:right;"></td>
       <td><select data-emb="pct" data-k="${k}"><option value="15" ${f.pct === 15 ? "selected" : ""}>15%</option><option value="20" ${f.pct !== 15 ? "selected" : ""}>20%</option></select></td>
@@ -2776,8 +2776,8 @@ function renderEmbargos(){
       <td><label class="chk ok"><input type="checkbox" data-emb="abono" data-k="${k}" ${abonado ? "checked" : ""}> ABONÓ HONORARIOS</label></td>
       <td>${transf ? '<span class="bdg ok">✓ transferido</span>' : '<span class="muted">—</span>'}</td>
       <td><label><input type="checkbox" data-emb="contador" data-k="${k}" ${f.contador ? "checked" : ""}> Contador</label></td>
-      <td><label><input type="checkbox" data-emb="rep" data-k="${k}" ${f.rep ? "checked" : ""} ${abonado ? "" : "disabled"}> Repartido</label></td>
-      <td>${esc(resp)}</td>
+      <td><label><input type="checkbox" data-emb="rep" data-k="${k}" ${f.rep ? "checked" : ""} ${abonado ? "" : "disabled"}> HONORARIOS REPARTIDOS</label></td>
+      <td><button type="button" class="btn-ver-rep" data-embver="${k}">VER REPARTO HONORARIOS</button></td>
       <td><input data-emb="comentarios" data-k="${k}" value="${esc(f.comentarios || "")}" style="width:160px;"></td>
       <td><button class="danger" data-embdel="${k}">Borrar</button></td></tr>`;
   };
@@ -2789,6 +2789,7 @@ function renderEmbargos(){
         <label>Cliente<input type="text" id="embNombre" placeholder="Apellido y nombre"></label>
         <label>DNI<input type="text" id="embDni"></label>
         <label>Juzgado<select id="embJuzgado"><option value="">—</option>${juzOpts("")}</select></label>
+        <label>Tipo<select id="embTipo"><option value="particular">Particular</option><option value="mutual">Mutual (9%)</option></select></label>
         <label>Expediente<input type="text" id="embExpte"></label>
         <label>Monto embargado<input type="text" id="embBruto" placeholder="0,00"></label>
         <label>Honorario<select id="embPct"><option value="15">15%</option><option value="20" selected>20%</option></select></label>
@@ -2803,12 +2804,39 @@ function renderEmbargos(){
         <div><span>Pendiente de ABONÓ</span><b style="color:${pendHon > 0 ? "#b91c1c" : "#15803d"};">${fmtMoney(pendHon)}</b></div>
       </div>
       <div style="overflow-x:auto;margin-top:10px;">
-        ${filas.length ? `<table><thead><tr><th>Cliente</th><th>DNI</th><th>Juzgado</th><th>Expediente</th><th>Monto embargado</th><th>%</th><th>Honorarios</th><th>Abonó</th><th>Transferencia</th><th>Contador</th><th>Repartido</th><th>Responsable</th><th>Comentarios</th><th></th></tr></thead><tbody>${filas.map(fila).join("")}</tbody></table>` : '<div class="muted" style="padding:10px;">Todavía no hay embargos cargados.</div>'}
+        ${filas.length ? `<table><thead><tr><th>Cliente</th><th>DNI</th><th>Juzgado</th><th>Tipo</th><th>Expediente</th><th>Monto embargado</th><th>%</th><th>Honorarios</th><th>Abonó</th><th>Transferencia</th><th>Contador</th><th>Honorarios repartidos</th><th>Reparto</th><th>Comentarios</th><th></th></tr></thead><tbody>${filas.map(f => fila(f) + (embRepAbiertas.has(f._k) ? `<tr><td colspan="15">${embRepartoHtml(f)}</td></tr>` : "")).join("")}</tbody></table>` : '<div class="muted" style="padding:10px;">Todavía no hay embargos cargados.</div>'}
       </div>
     </div>`;
   document.getElementById("embAgregar").addEventListener("click", embAgregar);
   cont.querySelectorAll("[data-emb]").forEach(el => el.addEventListener("change", () => embCambiar(el)));
   cont.querySelectorAll("[data-embdel]").forEach(b => b.addEventListener("click", () => embBorrar(b.dataset.embdel)));
+  cont.querySelectorAll("[data-embver]").forEach(b => b.addEventListener("click", () => { const k = b.dataset.embver; embRepAbiertas.has(k) ? embRepAbiertas.delete(k) : embRepAbiertas.add(k); renderEmbargos(); }));
+}
+// Reparto de un caso de embargo: misma regla que las complementarias (calcRep).
+// Base = lo que efectivamente ingresó por transferencia; si todavía no entró nada, el honorario calculado.
+const embRepAbiertas = new Set();
+function embBaseRep(f){
+  const ts = transfsDeFila(EMB_ID, f._k);
+  return ts.length ? Math.round(ts.reduce((s, t) => s + montosTransf(t).neto, 0)) : embHon(f);
+}
+function embRepartoHtml(f){
+  const base = embBaseRep(f);
+  const r = calcRep({honRecibo: base, tipo: f.tipo || "particular", juzgado: f.juzgado ? String(f.juzgado) : ""});
+  const filas = r.filas ? r.filas.map(x => {
+    const col = REP_COLOR[x.nombre] || "#64748b";
+    return `<tr><td><span class="rep-dot" style="background:${col}"></span>${esc(x.nombre)}</td>
+      <td class="num"><span class="rep-chip" style="background:${col}">${x.pct}%</span></td>
+      <td class="num rep-monto">${fmtMoney(x.monto)}</td></tr>`;
+  }).join("") : "";
+  const origen = transfsDeFila(EMB_ID, f._k).length ? "ingresó por transferencia" : "honorario calculado (todavía sin transferencia)";
+  return `<div class="tr-rep-box">
+    <div class="tr-rep-h">Reparto · base ${fmtMoney(base)} (${origen})${f.tipo === "mutual" ? " · cliente MUTUAL" : ""}${r.j ? " · Juzgado " + r.j : ""}</div>
+    ${r.filas
+      ? `<table class="rep-tab"><thead><tr><th>Integrante</th><th class="num">%</th><th class="num">Monto</th></tr></thead>
+         <tbody>${filas}<tr class="rep-total"><td>TOTAL REPARTIDO</td><td class="num">100%</td><td class="num">${fmtMoney(r.neto)}</td></tr></tbody></table>`
+      : `<div class="recibo-hint no">⚠️ Falta el juzgado: elegilo en la fila para ver el reparto.</div>`}
+    ${r.mutual ? `<div class="tr-rep-mut">Se descuenta 9% Mutual: <b>− ${fmtMoney(r.desc)}</b> <span class="muted">(ENTREGAR A LA MUTUAL)</span></div>` : ""}
+  </div>`;
 }
 function embAgregar(){
   const g = id => document.getElementById(id);
@@ -2818,7 +2846,7 @@ function embAgregar(){
   if(!(bruto > 0)) return embMsgTxt("Ingresá el monto embargado.", true);
   const ms = ahoraMs();
   const f = {_k: "E" + ms + "-" + Math.random().toString(36).slice(2, 7), mod: ms, name: nombre,
-             docnum: g("embDni").value.trim(), juzgado: g("embJuzgado").value || "", expte: g("embExpte").value.trim(),
+             docnum: g("embDni").value.trim(), juzgado: g("embJuzgado").value || "", tipo: g("embTipo").value || "particular", expte: g("embExpte").value.trim(),
              bruto: Math.round(bruto * 100) / 100, pct: +g("embPct").value === 15 ? 15 : 20, hon: "", comentarios: ""};
   const c = asegurarEmb(); c.filas.push(f); c.mod = ms;
   guardarArchivo();
