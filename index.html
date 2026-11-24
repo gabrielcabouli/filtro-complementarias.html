@@ -2463,8 +2463,8 @@ function trFormHtml(){
       <label>Importe transferido<input type="text" id="trImporte" placeholder="0,00"></label>
       <label>Juzgado (para repartir)<select id="trJuzgado"><option value="">—</option>${[1,2,3,4,5,6,7,8,9,10].map(n => `<option value="${n}">${n}</option>`).join("")}</select></label>
       <label>N° de expediente<input type="text" id="trExpte" placeholder="Ej: 12345/2024"></label>
-      <label>Carátula<input type="text" id="trCaratula" placeholder="Ej: PEREZ c/ CAJA s/ ..."></label>
-      <label>Decreto (nº o fecha)<input type="text" id="trDecreto"></label>
+      <label>Actor (titular de la causa)<input type="text" id="trActor"></label>
+      <label>Decreto<select id="trDecreto"><option value="">—</option><option value="2744/93">2744/93</option><option value="2140/13">2140/13</option><option value="380/17">380/17</option></select></label>
       <label>Tipo de cliente<select id="trTipo"><option value="particular">Particular</option><option value="mutual">Mutual (9%)</option></select></label>
       <label id="trPctWrap">% que retiene la gestoría<input type="text" id="trPct" value="3,25"></label>
       <label>Fecha de la transferencia<input type="date" id="trFecha" value="${hoyISO}"></label>
@@ -2490,6 +2490,7 @@ function engancharForm(){
       g("trImporte").value = (Math.round((f.bruto || 0) * pct) / 100).toFixed(2).replace(".", ",");   // editable
       const j = juzgadoRep(f) != null ? juzgadoRep(f) : (f.juzgado ? +f.juzgado : null);
       g("trJuzgado").value = j != null ? String(j) : "";
+      g("trExpte").value = f.expte || ""; g("trActor").value = nombreLindo(f.name); setDecreto(decretoDeCaratula(f.caratula));
       trCalcular();
     }
   });
@@ -2907,16 +2908,16 @@ function trActualizarOpciones(){
   trResultados = [];
   if(q.length >= 2){
     if(ARCHIVO[EMB_ID]) embFilasVivas().forEach(f => {
-      if(stripAccents(f.name || "").toUpperCase().includes(q) || (f.docnum || "").includes(q)) trResultados.push({c: ARCHIVO[EMB_ID], f});
+      if(stripAccents(f.name || "").toUpperCase().includes(q) || (f.docnum || "").includes(q) || (f.expte || "").includes(q)) trResultados.push({c: ARCHIVO[EMB_ID], f});
     });
     compsVivas().forEach(c => (c.filas || []).forEach(f => {
       if(f.borrado) return;
-      if(stripAccents(f.name || "").toUpperCase().includes(q) || (f.docnum || "").includes(q)) trResultados.push({c, f});
+      if(stripAccents(f.name || "").toUpperCase().includes(q) || (f.docnum || "").includes(q) || (f.expte || "").includes(q)) trResultados.push({c, f});
     }));
     trResultados = trResultados.slice(0, 40);
   }
   document.getElementById("trVincular").innerHTML = `<option value="">— Sin vincular a una complementaria —</option>` + trResultados.map((r, n) =>
-    `<option value="${n}">${esc(nombreLindo(r.f.name))} · DNI ${esc(r.f.docnum || "")} · ${esc(r.c.complementaria || "sin comp.")}</option>`).join("");
+    `<option value="${n}">${esc(nombreLindo(r.f.name))} · DNI ${esc(r.f.docnum || "")} · Expte. ${esc(r.f.expte || "—")} · ${esc(r.c.complementaria || "sin comp.")}</option>`).join("");
   trSel = null;
 }
 function trPctForm(){ const p = importeFlexible(document.getElementById("trPct").value || ""); return isFinite(p) ? p : NaN; }
@@ -2946,7 +2947,7 @@ function trEditar(k){
   g("trFecha").value = y ? `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}` : "";
   g("trIntegrante").value = t.integrante; g("trIntegrante").dispatchEvent(new Event("change"));
   g("trJuzgado").value = t.juzgado ? String(t.juzgado) : "";
-  g("trExpte").value = t.expte || ""; g("trCaratula").value = t.caratula || ""; g("trDecreto").value = t.decreto || "";
+  g("trExpte").value = t.expte || ""; g("trActor").value = t.actor || t.caratula || ""; setDecreto(t.decreto || "");
   g("trTipo").value = t.tipo || "particular";
   if(t.integrante === "GESTORIA") g("trPct").value = String(pctTransf(t)).replace(".", ",");
   document.querySelector(`input[name="trFormEnt"][value="${t.entregado ? "si" : "no"}"]`).checked = true;
@@ -2964,7 +2965,7 @@ function trCancelarEdicion(){
   g("trCancelarEdit").style.display = "none";
   g("trMsg").textContent = "";
   g("trNombre").value = ""; g("trDni").value = ""; g("trImporte").value = "";
-  g("trExpte").value = ""; g("trCaratula").value = ""; g("trDecreto").value = "";
+  g("trExpte").value = ""; g("trActor").value = ""; g("trDecreto").value = "";
   trCalcular();
 }
 function actualizarTransf(){
@@ -2991,7 +2992,7 @@ function actualizarTransf(){
     nombre, dni: g("trDni").value.trim(), integrante: integ,
     importe: Math.round(importe * 100) / 100, fecha: `${d}/${m}/${y}`,
     juzgado: g("trJuzgado").value || "", tipo: g("trTipo").value || "particular",
-    expte: g("trExpte").value.trim(), caratula: g("trCaratula").value.trim(), decreto: g("trDecreto").value.trim(),
+    expte: g("trExpte").value.trim(), actor: g("trActor").value.trim(), decreto: g("trDecreto").value,
     entregado: document.querySelector('input[name="trFormEnt"]:checked').value === "si",
     mod: ahoraMs()
   });
@@ -3005,12 +3006,24 @@ function actualizarTransf(){
   msg.textContent = "✓ Transferencia actualizada.";
   refrescarVistasTransf();
 }
+function decretoDeCaratula(txt){
+  const cod = (((txt || "").split("||")[0]) || "").toUpperCase();
+  if(cod.includes("2744")) return "2744/93";
+  if(cod.includes("2140")) return "2140/13";
+  if(cod.includes("380")) return "380/17";
+  return "";
+}
+function setDecreto(v){
+  const sel = document.getElementById("trDecreto");
+  if(v && ![...sel.options].some(o => o.value === v)) sel.add(new Option(v, v));
+  sel.value = v || "";
+}
 function trEsEmbargo(t){ return t.compId === EMB_ID; }
 function trCausaHtml(t){
-  if(!(t.expte || t.caratula || t.decreto)) return "";
+  if(!(t.expte || t.actor || t.decreto)) return "";
   const p = [];
   if(t.expte) p.push("Expte. " + esc(t.expte));
-  if(t.caratula) p.push(esc(t.caratula));
+  if(t.actor) p.push("Actor: " + esc(t.actor));
   if(t.decreto) p.push("Decreto " + esc(t.decreto));
   return `<div style="font-size:12px;color:#475569;margin-top:2px;">⚖️ ${p.join(" · ")}</div>`;
 }
@@ -3032,7 +3045,7 @@ function registrarTransf(){
              fecha: `${d}/${m}/${y}`, complementaria: "", compId: "", filaK: ""};
   t.repartido = document.querySelector('input[name="trFormRep"]:checked').value === "si";
   t.juzgado = g("trJuzgado").value || "";
-  t.expte = g("trExpte").value.trim(); t.caratula = g("trCaratula").value.trim(); t.decreto = g("trDecreto").value.trim();
+  t.expte = g("trExpte").value.trim(); t.actor = g("trActor").value.trim(); t.decreto = g("trDecreto").value;
   t.entregado = document.querySelector('input[name="trFormEnt"]:checked').value === "si";
   t.tipo = g("trTipo").value || "particular";
   if(t.integrante === "GESTORIA"){
