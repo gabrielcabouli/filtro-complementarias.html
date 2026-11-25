@@ -2936,6 +2936,22 @@ function embRepartoHtml(f){
   </div>`;
 }
 // Lee un oficio de transferencia (DEO) y devuelve los datos del embargo.
+// Importe escrito en palabras (ej. "PESOS TRES MILLONES QUINIENTOS ... CON 70/100"): se usa cuando el número no se lee.
+function montoEnLetras(t){
+  const m = /PESOS\s+((?:[A-ZÁÉÍÓÚÑ]+\s*)+?)\s+CON\s+(\d{2})\s*\/\s*100/i.exec(t || "");
+  if(!m) return 0;
+  const val = {CERO:0, UN:1, UNO:1, UNA:1, DOS:2, TRES:3, CUATRO:4, CINCO:5, SEIS:6, SIETE:7, OCHO:8, NUEVE:9, DIEZ:10, ONCE:11, DOCE:12, TRECE:13, CATORCE:14, QUINCE:15, DIECISEIS:16, DIECISIETE:17, DIECIOCHO:18, DIECINUEVE:19, VEINTE:20, TREINTA:30, CUARENTA:40, CINCUENTA:50, SESENTA:60, SETENTA:70, OCHENTA:80, NOVENTA:90, CIEN:100, CIENTO:100, DOSCIENTOS:200, TRESCIENTOS:300, CUATROCIENTOS:400, QUINIENTOS:500, SEISCIENTOS:600, SETECIENTOS:700, OCHOCIENTOS:800, NOVECIENTOS:900};
+  let total = 0, cur = 0;
+  for(const w of m[1].toUpperCase().split(/\s+/)){
+    if(!w || w === "Y") continue;
+    if(w === "MIL"){ total += (cur || 1) * 1000; cur = 0; }
+    else if(w === "MILLON" || w === "MILLONES"){ total += (cur || 1) * 1000000; cur = 0; }
+    else if(w.startsWith("VEINTI") && (w.slice(6) in val)){ cur += 20 + val[w.slice(6)]; }
+    else if(w in val){ cur += val[w]; }
+    else return 0;
+  }
+  return total + cur + (+m[2]) / 100;
+}
 function parsearOficioDeo(texto){
   const t = (texto || "").replace(/\s+/g, " ").trim();
   const d = {expte: "", autos: "", actor: "", juzgado: "", monto: 0, deo: "", fecha: "", titularCuenta: "", decreto: ""};
@@ -2945,9 +2961,10 @@ function parsearOficioDeo(texto){
   if(m){ d.autos = m[1].trim(); d.actor = d.autos.split(/\s+c\/\s*/i)[0].trim(); }
   m = /JUZG(?:ADO|\.)?\s*(?:FEDERAL|FED\.?)?\s*(?:DE\s+LA\s+|DE\s+)?SEG(?:URIDAD)?\.?\s*SOC(?:IAL)?\.?\s*(?:N(?:[º°o]|ro)\.?\s*)?(\d{1,2})\b/i.exec(t);
   if(m) d.juzgado = m[1];
-  m = /suma de\s*[$Ss5]?\s*([\d.\s]+,\d{2})/i.exec(t) || /\$\s*([\d.\s]+,\d{2})/.exec(t);
+  m = /suma de\s*[$Ss5]?\s*(\d[\d.\s]*,\d{2})/i.exec(t) || /\$\s*(\d[\d.\s]*,\d{2})/.exec(t);
   if(m) d.monto = importeFlexible(m[1].replace(/\s/g, ""));
   else { const montos = [...t.matchAll(/\d{1,3}(?:\.\d{3})+,\d{2}/g)].map(x => importeFlexible(x[0])); if(montos.length) d.monto = Math.max(...montos); }
+  if(!d.monto) d.monto = montoEnLetras(t);
   m = /DEO\s*N[º°]?\s*:?\s*(\d{5,})/i.exec(t);
   if(m) d.deo = m[1];
   m = /(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+de\s+(\d{4})/i.exec(t);
@@ -5312,6 +5329,15 @@ function listaClientesEstudio(){
   lista.sort((a, b) => (a.nombre || "").localeCompare(b.nombre || "", "es"));
   return lista;
 }
+// Número para WhatsApp (Argentina). Si el número no tiene código de país, se asume celular (549). Si no se puede armar, no hay link.
+function waNumero(t){
+  let d = String(t || "").replace(/\D/g, "");
+  if(!d) return "";
+  if(d.startsWith("549") || d.startsWith("54")) return d;
+  d = d.replace(/^0+/, "");
+  if(d.length === 10) return "549" + d;
+  return "";
+}
 function renderClientesEstudio(){
   const cont = document.getElementById("tabClientes");
   if(!cont) return;
@@ -5321,7 +5347,7 @@ function renderClientesEstudio(){
   const filas = lista.map(g => `<tr>
       <td><input type="text" data-cli-clave="${esc(g.clave)}" data-cli-campo="nombre" value="${esc(g.nombre || "")}" style="width:200px;"></td>
       <td><input type="text" data-cli-clave="${esc(g.clave)}" data-cli-campo="dni" value="${esc(g.docnum || "")}" style="width:90px;"></td>
-      <td><input type="text" data-cli-clave="${esc(g.clave)}" data-cli-campo="telefonos" value="${esc((g.telefonos || []).join(", "))}" placeholder="Agregar teléfono" style="width:190px;"></td>
+      <td><input type="text" data-cli-clave="${esc(g.clave)}" data-cli-campo="telefonos" value="${esc((g.telefonos || []).join(", "))}" placeholder="Agregar teléfono" style="width:190px;">${(g.telefonos || []).map(t => { const w = waNumero(t); return w ? `<br><a href="https://wa.me/${w}" target="_blank" rel="noopener" style="font-size:12px;">💬 WhatsApp ${esc(t)}</a>` : ""; }).join("")}</td>
       <td><input type="text" data-cli-clave="${esc(g.clave)}" data-cli-campo="direccion" value="${esc(g.direccion || "")}" placeholder="Agregar dirección" style="width:230px;"></td>
       <td>${g.juicios.length ? "" : '<span class="muted">Sin juicios cargados</span>'}${g.juicios.map(j => `<div class="muted" style="padding:3px 0;font-size:13px;">${j.decreto ? `<b>${esc(j.decreto)}</b> · ` : ""}${j.juzgado ? `Juz. ${esc(j.juzgado)} · ` : ""}${j.expte ? `Expte. ${esc(j.expte)} · ` : ""}${esc(j.juicio || "")} <i>(${esc(j.origen)})</i></div>`).join("")}${(g.extras || []).map(x => `<div style="padding:4px 0;border-top:1px dashed #e2e8f0;display:flex;flex-direction:column;gap:4px;">
           <input type="text" data-cli-clave="${esc(g.clave)}" data-cli-extra="${esc(x.id)}" data-cli-campo="autos" value="${esc(x.autos || "")}" placeholder="Autos (carátula)" style="width:100%;">
