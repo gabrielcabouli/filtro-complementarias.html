@@ -5236,7 +5236,10 @@ function listaClientesEstudio(){
   grupos.forEach((g, clave) => {
     const ov = datos && (datos.filas || []).find(x => x.clave === clave && !x.borrado);
     if(ov && Array.isArray(ov.telefonos)) g.telefonos = ov.telefonos;
+    if(ov && ov.nombre) g.nombre = ov.nombre;
+    if(ov && ov.dni) g.docnum = ov.dni;
     g.direccion = ov ? (ov.direccion || "") : "";
+    g.extras = ov ? (ov.extras || []).filter(x => !x.borrado) : [];
     g.tel = g.telefonos.join(", ");
   });
   let lista = [...grupos.values()];
@@ -5250,13 +5253,22 @@ function renderClientesEstudio(){
   if(!cont) return;
   if(!archivoListo){ cont.innerHTML = '<div class="panel">Cargando…</div>'; return; }
   const lista = listaClientesEstudio();
-  const totJ = lista.reduce((s, g) => s + g.juicios.length, 0);
+  const totJ = lista.reduce((s, g) => s + g.juicios.length + (g.extras || []).length, 0);
   const filas = lista.map(g => `<tr>
-      <td><b>${esc(g.nombre || "—")}</b></td>
-      <td>${esc(g.docnum || "—")}</td>
+      <td><input type="text" data-cli-clave="${esc(g.clave)}" data-cli-campo="nombre" value="${esc(g.nombre || "")}" style="width:200px;"></td>
+      <td><input type="text" data-cli-clave="${esc(g.clave)}" data-cli-campo="dni" value="${esc(g.docnum || "")}" style="width:90px;"></td>
       <td><input type="text" data-cli-clave="${esc(g.clave)}" data-cli-campo="telefonos" value="${esc((g.telefonos || []).join(", "))}" placeholder="Agregar teléfono" style="width:190px;"></td>
       <td><input type="text" data-cli-clave="${esc(g.clave)}" data-cli-campo="direccion" value="${esc(g.direccion || "")}" placeholder="Agregar dirección" style="width:230px;"></td>
-      <td>${g.juicios.length ? "" : '<span class="muted">Sin juicios cargados</span>'}${g.juicios.map(j => `<div style="padding:3px 0;border-bottom:1px dashed #e2e8f0;">${j.embargo ? '<span class="bdg">⚖️ EMBARGO</span> ' : ""}${j.decreto ? `<b>${esc(j.decreto)}</b> · ` : ""}${j.juzgado ? `Juzgado ${esc(j.juzgado)} · ` : ""}${j.expte ? `Expte. ${esc(j.expte)} · ` : ""}${esc(j.juicio || "")}<br><span class="muted" style="font-size:12px;">${esc(j.origen)}${j.honorarios ? " · honorarios: " + esc(j.honorarios) : ""}${j.bruto ? " · " + fmtMoney(j.bruto) : ""}</span></div>`).join("")}</td>
+      <td>${g.juicios.length ? "" : '<span class="muted">Sin juicios cargados</span>'}${g.juicios.map(j => `<div class="muted" style="padding:3px 0;font-size:13px;">${j.decreto ? `<b>${esc(j.decreto)}</b> · ` : ""}${j.juzgado ? `Juz. ${esc(j.juzgado)} · ` : ""}${j.expte ? `Expte. ${esc(j.expte)} · ` : ""}${esc(j.juicio || "")} <i>(${esc(j.origen)})</i></div>`).join("")}${(g.extras || []).map(x => `<div style="padding:4px 0;border-top:1px dashed #e2e8f0;display:flex;flex-direction:column;gap:4px;">
+          <input type="text" data-cli-clave="${esc(g.clave)}" data-cli-extra="${esc(x.id)}" data-cli-campo="autos" value="${esc(x.autos || "")}" placeholder="Autos (carátula)" style="width:100%;">
+          <div style="display:flex;gap:4px;flex-wrap:wrap;">
+            <input type="text" data-cli-clave="${esc(g.clave)}" data-cli-extra="${esc(x.id)}" data-cli-campo="expte" value="${esc(x.expte || "")}" placeholder="Expte." style="width:110px;">
+            <select data-cli-clave="${esc(g.clave)}" data-cli-extra="${esc(x.id)}" data-cli-campo="decreto">${["", "2744/93", "2140/13", "380/17"].map(d => `<option value="${d}" ${x.decreto === d ? "selected" : ""}>${d || "Decreto —"}</option>`).join("")}</select>
+            <input type="text" data-cli-clave="${esc(g.clave)}" data-cli-extra="${esc(x.id)}" data-cli-campo="juzgado" value="${esc(x.juzgado || "")}" placeholder="Juzgado" style="width:80px;">
+            <button type="button" data-cli-del="${esc(x.id)}" data-cli-clave="${esc(g.clave)}">Quitar</button>
+          </div>
+        </div>`).join("")}
+        <button type="button" data-cli-add="${esc(g.clave)}" style="margin-top:4px;">+ Agregar juicio</button></td>
     </tr>`).join("");
   cont.innerHTML = `<div class="panel">
       <div><b style="font-size:16px;">👥 Clientes del estudio</b>
@@ -5279,7 +5291,7 @@ function renderClientesEstudio(){
     const n = document.getElementById("ctBuscar"); n.focus(); n.setSelectionRange(p, p);
   });
   wireImport();
-  if(!cont._cli){ cont._cli = true; cont.addEventListener("change", cliOnChange); }
+  if(!cont._cli){ cont._cli = true; cont.addEventListener("change", cliOnChange); cont.addEventListener("click", cliOnClick); }
 }
 
 // ---------- CLIENTES: listado general (importado desde DOCX→JSON) ----------
@@ -5383,19 +5395,46 @@ function renderFallecidos(){
   });
 }
 
-// CLIENTES: teléfonos y dirección editables (se guardan aparte, la base no cambia)
-function cliOnChange(e){
-  const el = e.target, clave = el.dataset.cliClave, campo = el.dataset.cliCampo;
-  if(!clave || !campo) return;
+// CLIENTES: datos editables (nombre, DNI, teléfonos, dirección) y juicios agregados a mano.
+// Se guardan aparte en CDAT_ID; la base y las complementarias no cambian.
+function cliOverride(clave){
   if(!ARCHIVO[CDAT_ID]) ARCHIVO[CDAT_ID] = {id: CDAT_ID, complementaria: "", anio: "", fechaPago: "", mod: ahoraMs(), filas: []};
   const c = ARCHIVO[CDAT_ID];
   let f = (c.filas || []).find(x => x.clave === clave && !x.borrado);
-  if(!f){ f = {clave, telefonos: null, direccion: null}; c.filas.push(f); }
-  if(campo === "telefonos") f.telefonos = el.value.split(/[,;\n]/).map(s => s.trim()).filter(Boolean);
-  else f.direccion = el.value.trim();
-  f.mod = ahoraMs(); c.mod = f.mod;
-  guardarArchivo();
-  renderClientesEstudio();
+  if(!f){ f = {clave, telefonos: null, direccion: null, nombre: null, dni: null, extras: []}; c.filas.push(f); }
+  return f;
+}
+function cliGuardar(f){ f.mod = ahoraMs(); ARCHIVO[CDAT_ID].mod = f.mod; guardarArchivo(); renderClientesEstudio(); }
+function cliOnChange(e){
+  const el = e.target, clave = el.dataset.cliClave, campo = el.dataset.cliCampo, extraId = el.dataset.cliExtra;
+  if(!clave || !campo) return;
+  const f = cliOverride(clave);
+  if(extraId){
+    f.extras = f.extras || [];
+    let x = f.extras.find(y => y.id === extraId);
+    if(!x){ x = {id: extraId}; f.extras.push(x); }
+    x[campo] = el.value.trim();
+  }
+  else if(campo === "telefonos") f.telefonos = el.value.split(/[,;\n]/).map(s => s.trim()).filter(Boolean);
+  else if(campo === "direccion") f.direccion = el.value.trim();
+  else if(campo === "nombre") f.nombre = el.value.trim();
+  else if(campo === "dni") f.dni = el.value.trim();
+  cliGuardar(f);
+}
+function cliOnClick(e){
+  const add = e.target.closest("[data-cli-add]");
+  if(add){
+    const f = cliOverride(add.dataset.cliAdd);
+    f.extras = f.extras || [];
+    f.extras.push({id: "J" + Date.now() + Math.random().toString(36).slice(2, 6), expte: "", autos: "", decreto: "", juzgado: ""});
+    cliGuardar(f); return;
+  }
+  const del = e.target.closest("[data-cli-del]");
+  if(del){
+    const f = cliOverride(del.dataset.cliClave);
+    const x = (f.extras || []).find(y => y.id === del.dataset.cliDel);
+    if(x){ x.borrado = true; cliGuardar(f); }
+  }
 }
 function listaDeudores(){
   const grupos = new Map();
