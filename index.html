@@ -463,7 +463,7 @@
   <button class="tab" data-tab="tabArchivo">📚 COMPLEMENTARIAS POR AÑO <span id="archCount" class="tab-count"></span></button>
   <button class="tab" data-tab="tabDeudores">💸 CLIENTES DEUDORES <span id="deuCount" class="tab-count deu"></span></button>
   <button class="tab" data-tab="tabTransf">💳 TRANSFERENCIAS AL ESTUDIO</button>
-  <button class="tab" data-tab="tabEmbargos">⚖️ EMBARGOS</button>
+  <button class="tab" data-tab="tabEmbargos">⚖️ EMBARGOS <span id="embAvisos" class="tab-count deu"></span></button>
   <button class="tab" data-tab="tabClientes">👥 CLIENTES DEL ESTUDIO</button>
   <button class="tab" data-tab="tabFallecidos">🕊️ FALLECIDOS</button>
   <button class="secondary mini" id="btnBloquear" style="margin-left:auto; align-self:center;" title="Cierra el programa; para volver a entrar pide la contraseña">🔒 Bloquear</button>
@@ -2241,6 +2241,7 @@ async function cargarArchivo(){
   setTimeout(revisarSegundosAviso, 800);
   setInterval(revisarSegundosAviso, 3600000);
   actualizarContadorArchivo();
+  actualizarAvisoEmbargos();
 }
 // Datos viejos: cada fila recibe una clave estable (_k) y una marca de tiempo (mod) para poder
 // combinar los cambios hechos en distintas PC.
@@ -2774,6 +2775,52 @@ function embMsgTxt(t, err){
   const m = document.getElementById("embMsg"); if(!m) return;
   m.style.color = err ? "#b91c1c" : "#15803d"; m.textContent = (err ? "⚠️ " : "✓ ") + t;
 }
+// Aviso de comunicarse con el cliente: 10 días desde la fecha del oficio, si todavía no está marcado como comunicado.
+function embDiasDesde(iso){
+  if(!iso) return null;
+  const p = iso.split("-").map(Number); const f = new Date(p[0], p[1] - 1, p[2]);
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  return Math.floor((hoy - f) / 86400000);
+}
+function embVencidos(){
+  return embFilasVivas().filter(f => !f.comunicado && f.fechaOficio && embDiasDesde(f.fechaOficio) >= 10)
+    .sort((a, b) => embDiasDesde(b.fechaOficio) - embDiasDesde(a.fechaOficio));
+}
+function embAvisoHTML(){
+  const v = embVencidos(); if(!v.length) return "";
+  return `<div class="panel" style="border:2px solid #b91c1c;margin-bottom:10px;">
+    <b style="color:#b91c1c;font-size:15px;">⏰ Comunicarse con el cliente: ${v.length} embargo${v.length > 1 ? "s" : ""} con 10 o más días desde el oficio</b>
+    <ul style="margin:8px 0 0 18px;">${v.map(f => `<li><b>${esc(f.name || "")}</b> · Expte. ${esc(f.expte || "—")} · oficio ${esc(f.fechaOficio.split("-").reverse().join("/"))} (${embDiasDesde(f.fechaOficio)} días) <button type="button" class="mini" data-embcomunicado="${esc(f._k)}">✓ Ya comunicado</button></li>`).join("")}</ul>
+  </div>`;
+}
+function embComunicado(k){
+  const c = asegurarEmb();
+  const i = c.filas.findIndex(x => x._k === k && !x.borrado); if(i < 0) return;
+  c.filas[i] = Object.assign({}, c.filas[i], {comunicado: true, mod: ahoraMs()});
+  c.mod = ahoraMs(); guardarArchivo(); renderEmbargos();
+}
+function actualizarAvisoEmbargos(){
+  const el = document.getElementById("embAvisos");
+  if(el){ const n = embVencidos().length; el.textContent = n ? String(n) : ""; }
+}
+// Aviso al cliente por embargo: se acredita dentro de 10 días hábiles y luego se comunica con el estudio para arreglar honorarios.
+function textoAvisoEmbargo(f){
+  const fecha = f.fechaOficio ? f.fechaOficio.split("-").reverse().join("/") : "";
+  const monto = f.bruto ? fmtMoney(+f.bruto) : "";
+  const expte = f.expte ? ` Expte. ${f.expte}` : "";
+  const autos = f.autos ? ` (${f.autos})` : "";
+  return `Estimado/a ${nombreLindo(f.name || "")}:\n\n` +
+    `Le informamos que en el expediente${expte}${autos} el juzgado ordenó transferir fondos a su favor${monto ? ` por ${monto}` : ""}${fecha ? `, mediante oficio de fecha ${fecha}` : ""}.\n\n` +
+    `Le solicitamos verificar la acreditación en su cuenta dentro de los 10 días hábiles. Una vez corroborado, comuníquese con el estudio para arreglar los honorarios correspondientes.\n\n` +
+    `Saludos cordiales.`;
+}
+function embMarcarAviso(k){
+  const c = asegurarEmb();
+  const i = c.filas.findIndex(x => x._k === k && !x.borrado); if(i < 0) return;
+  const hoy = new Date(); const iso = [hoy.getFullYear(), String(hoy.getMonth() + 1).padStart(2, "0"), String(hoy.getDate()).padStart(2, "0")].join("-");
+  c.filas[i] = Object.assign({}, c.filas[i], {avisoFecha: iso, mod: ahoraMs()});
+  c.mod = ahoraMs(); guardarArchivo();
+}
 function renderEmbargos(){
   const cont = document.getElementById("tabEmbargos");
   if(!cont) return;
@@ -2803,10 +2850,12 @@ function renderEmbargos(){
       <td><label><input type="checkbox" data-emb="contador" data-k="${k}" ${f.contador ? "checked" : ""}> Contador</label></td>
       <td><label><input type="checkbox" data-emb="rep" data-k="${k}" ${f.rep ? "checked" : ""} ${abonado ? "" : "disabled"}> HONORARIOS REPARTIDOS</label></td>
       <td><button type="button" class="btn-ver-rep" data-embver="${k}">VER REPARTO HONORARIOS</button></td>
-      <td><input data-emb="comentarios" data-k="${k}" value="${esc(f.comentarios || "")}" style="width:160px;"><br><button type="button" class="mini" data-embcopy="${k}">📋 Copiar para el cliente</button></td>
+      <td><input data-emb="comentarios" data-k="${k}" value="${esc(f.comentarios || "")}" style="width:160px;"><br><button type="button" class="mini" data-embcopy="${k}">📋 Copiar para el cliente</button><br><button type="button" class="mini" data-embaviso="${k}">📣 Aviso de embargo</button>${f.avisoFecha ? `<div class="muted" style="font-size:11px;">Aviso ${esc(f.avisoFecha.split("-").reverse().join("/"))}</div>` : ""}</td>
+      <td><input type="date" data-emb="fechaOficio" data-k="${k}" value="${esc(f.fechaOficio || "")}"></td>
+      <td><label><input type="checkbox" data-emb="comunicado" data-k="${k}" ${f.comunicado ? "checked" : ""}> Comunicado</label></td>
       <td><button class="danger" data-embdel="${k}">Borrar</button></td></tr>`;
   };
-  cont.innerHTML = `
+  cont.innerHTML = `${embAvisoHTML()}
     <div class="panel">
       <div><b style="font-size:16px;">⚖️ Embargos</b>
         <div class="sub" style="margin:4px 0 0;">Casos donde el estudio cobra por embargo. Se reparten igual que las complementarias. Podés elegir 15% o 20% en cada caso y editar cualquier dato.</div></div>
@@ -2817,6 +2866,7 @@ function renderEmbargos(){
         <label>Tipo<select id="embTipo"><option value="particular">Particular</option><option value="mutual">Mutual (9%)</option></select></label>
         <label>Expediente<input type="text" id="embExpte"></label>
         <label>Monto embargado<input type="text" id="embBruto" placeholder="0,00"></label>
+        <label>Fecha del oficio<input type="date" id="embFecha"></label>
         <label>Honorario<select id="embPct"><option value="15">15%</option><option value="20" selected>20%</option></select></label>
       </div>
       <div class="tr-form" style="margin-top:12px;">
@@ -2848,13 +2898,15 @@ function renderEmbargos(){
         <div><span>Pendiente de ABONÓ</span><b style="color:${pendHon > 0 ? "#b91c1c" : "#15803d"};">${fmtMoney(pendHon)}</b></div>
       </div>
       <div style="overflow-x:auto;margin-top:10px;">
-        ${filas.length ? `<table><thead><tr><th>Cliente</th><th>DNI</th><th>Juzgado</th><th>Tipo</th><th>Expediente</th><th>Monto embargado</th><th>%</th><th>Honorarios</th><th>Abonó</th><th>Transferencia</th><th>Contador</th><th>Honorarios repartidos</th><th>Reparto</th><th>Comentarios</th><th></th></tr></thead><tbody>${filas.map(f => fila(f) + (embRepAbiertas.has(f._k) ? `<tr><td colspan="15">${embRepartoHtml(f)}</td></tr>` : "")).join("")}</tbody></table>` : '<div class="muted" style="padding:10px;">Todavía no hay embargos cargados.</div>'}
+        ${filas.length ? `<table><thead><tr><th>Cliente</th><th>DNI</th><th>Juzgado</th><th>Tipo</th><th>Expediente</th><th>Monto embargado</th><th>%</th><th>Honorarios</th><th>Abonó</th><th>Transferencia</th><th>Contador</th><th>Honorarios repartidos</th><th>Reparto</th><th>Comentarios</th><th>Fecha oficio</th><th>Comunicado</th><th></th></tr></thead><tbody>${filas.map(f => fila(f) + (embRepAbiertas.has(f._k) ? `<tr><td colspan="15">${embRepartoHtml(f)}</td></tr>` : "")).join("")}</tbody></table>` : '<div class="muted" style="padding:10px;">Todavía no hay embargos cargados.</div>'}
       </div>
     </div>`;
   document.getElementById("embAgregar").addEventListener("click", embAgregar);
   engancharOficioEmb();
   cont.querySelectorAll("[data-emb]").forEach(el => el.addEventListener("change", () => embCambiar(el)));
   cont.querySelectorAll("[data-embdel]").forEach(b => b.addEventListener("click", () => embBorrar(b.dataset.embdel)));
+  cont.querySelectorAll("[data-embcomunicado]").forEach(b => b.addEventListener("click", () => embComunicado(b.dataset.embcomunicado)));
+  actualizarAvisoEmbargos();
   cont.querySelectorAll("[data-embver]").forEach(b => b.addEventListener("click", () => { const k = b.dataset.embver; embRepAbiertas.has(k) ? embRepAbiertas.delete(k) : embRepAbiertas.add(k); renderEmbargos(); }));
 }
 // Reparto de un caso de embargo: misma regla que las complementarias (calcRep).
@@ -2906,6 +2958,8 @@ function parsearOficioDeo(texto){
   }
   m = /titularidad\s+de\s+(.+?)\s+CUIT/i.exec(t);
   if(m) d.titularCuenta = m[1].trim();
+  m = /CUIT\/?CUIL\s*(\d{2})\s*-?\s*(\d{7,8})\s*-?\s*\d/i.exec(t);
+  if(m) d.dniTitular = String(parseInt(m[2], 10));
   if(/2744/.test(t)) d.decreto = "2744/93";
   else if(/2140/.test(t)) d.decreto = "2140/13";
   else if(/380\/17/.test(t)) d.decreto = "380/17";
@@ -2926,6 +2980,7 @@ function embPintarForm(){
   v("embExpte", embForm.expte || "");
   v("embBruto", embForm.bruto ? (+embForm.bruto).toFixed(2).replace(".", ",") : "");
   if(embForm.pct) v("embPct", String(embForm.pct));
+  v("embFecha", embForm.fechaOficio || "");
   v("embAutos", embForm.autos || ""); v("embDecreto", embForm.decreto || ""); v("embDeo", embForm.deo || "");
 }
 function embBuscarBase(texto, sel){
@@ -2985,9 +3040,9 @@ function procesarOficioTexto(texto){
   if(!d.monto) faltan.push("monto");
   const com = [d.deo ? `Oficio DEO N° ${d.deo}${d.fecha ? " del " + d.fecha : ""}` : "", d.titularCuenta ? `Transferido a la cuenta de ${d.titularCuenta}` : ""].filter(Boolean).join(". ");
   embForm = Object.assign({}, embForm, {
-    nombre: d.actor || embForm.nombre || "", expte: d.expte || embForm.expte || "",
+    nombre: d.titularCuenta || d.actor || embForm.nombre || "", dni: d.dniTitular || embForm.dni || "", expte: d.expte || embForm.expte || "",
     juzgado: d.juzgado || embForm.juzgado || "", bruto: d.monto || embForm.bruto || 0,
-    autos: d.autos || "", decreto: d.decreto || embForm.decreto || "", deo: d.deo || "",
+    autos: d.autos || "", decreto: d.decreto || embForm.decreto || "", deo: d.deo || "", fechaOficio: d.fecha ? d.fecha.split("/").reverse().join("-") : (embForm.fechaOficio || ""),
     comentarios: com
   });
   const hit = d.expte ? decretoDeExpte(d.expte) : null;
@@ -3046,6 +3101,13 @@ function engancharOficioEmb(){
     sel.addEventListener("change", () => embElegirBase(sel.value));
     embBuscarBase("", sel);
   }
+  document.querySelectorAll("[data-embaviso]").forEach(b => b.addEventListener("click", () => {
+    const f = embFilasVivas().find(x => x._k === b.dataset.embaviso);
+    if(!f) return;
+    copiarTexto(textoAvisoEmbargo(f), b);
+    embMarcarAviso(f._k);
+    renderEmbargos();
+  }));
   document.querySelectorAll("[data-embcopy]").forEach(b => b.addEventListener("click", () => {
     const f = embFilasVivas().find(x => x._k === b.dataset.embcopy);
     if(f) copiarTexto(textoHonorariosCliente(f), b);
@@ -3061,7 +3123,7 @@ function embAgregar(){
   const ms = ahoraMs();
   const f = {_k: "E" + ms + "-" + Math.random().toString(36).slice(2, 7), mod: ms, name: nombre,
              docnum: g("embDni").value.trim(), juzgado: g("embJuzgado").value || "", tipo: g("embTipo").value || "particular", expte: g("embExpte").value.trim(),
-             bruto: Math.round(bruto * 100) / 100, pct: +g("embPct").value === 15 ? 15 : 20, hon: "", comentarios: embForm.comentarios || "", autos: g("embAutos").value.trim(), decreto: g("embDecreto").value, deo: g("embDeo").value.trim(), base: embForm.base || null};
+             bruto: Math.round(bruto * 100) / 100, pct: +g("embPct").value === 15 ? 15 : 20, hon: "", comentarios: embForm.comentarios || "", autos: g("embAutos").value.trim(), decreto: g("embDecreto").value, deo: g("embDeo").value.trim(), base: embForm.base || null, fechaOficio: g("embFecha").value || "", comunicado: false};
   embForm = {};
   const c = asegurarEmb(); c.filas.push(f); c.mod = ms;
   guardarArchivo();
@@ -3087,6 +3149,8 @@ function embCambiar(el){
   }
   else if(campo === "pct"){ cambios.pct = +el.value === 15 ? 15 : 20; }
   else if(campo === "juzgado"){ cambios.juzgado = el.value; }
+  else if(campo === "comunicado"){ cambios.comunicado = el.checked; }
+  else if(campo === "fechaOficio"){ cambios.fechaOficio = el.value || ""; }
   else { cambios[campo] = el.value.trim(); }   // name, docnum, expte, comentarios
   c.filas[i] = Object.assign({}, f, cambios, {mod: ahoraMs()});
   c.mod = ahoraMs();
