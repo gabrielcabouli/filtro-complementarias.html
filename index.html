@@ -1622,6 +1622,7 @@ function telefonosUnicos(telefono){
 const CEL_ID = "__celulares_confirmados__";
 const LIS_ID = "__listado_clientes__";
 const FAL_ID = "__fallecidos__";
+const CDAT_ID = "__clientes_datos__";
 function celConfirmado(clave){
   try{ const c = ARCHIVO && ARCHIVO[CEL_ID]; return !!(c && c.filas.some(f => f._k === clave && !f.borrado)); }catch(e){ return false; }
 }
@@ -2255,7 +2256,7 @@ function migrarArchivo(A){
 }
 const ahoraMs = () => Date.now();
 function filasVivas(c){ return ordenarFilasAlfabetico((c.filas || []).filter(f => !f.borrado)); }
-function compsVivas(){ return Object.values(ARCHIVO).filter(c => !c.borrado && c.id !== CEL_ID && c.id !== TRANSF_ID && c.id !== CUENTAS_ID && c.id !== EMB_ID && c.id !== LIS_ID && c.id !== FAL_ID); }
+function compsVivas(){ return Object.values(ARCHIVO).filter(c => !c.borrado && c.id !== CEL_ID && c.id !== TRANSF_ID && c.id !== CUENTAS_ID && c.id !== EMB_ID && c.id !== LIS_ID && c.id !== FAL_ID && c.id !== CDAT_ID); }
 let _guardarTimer = null;
 let _desdeNube = false;   // true cuando el guardado local viene de una bajada de la nube (no hace falta volver a subir)
 function guardarArchivo(){
@@ -2892,8 +2893,9 @@ function parsearOficioDeo(texto){
   if(m){ d.autos = m[1].trim(); d.actor = d.autos.split(/\s+c\/\s*/i)[0].trim(); }
   m = /JUZG(?:ADO|\.)?\s*(?:FEDERAL|FED\.?)?\s*(?:DE\s+LA\s+|DE\s+)?SEG(?:URIDAD)?\.?\s*SOC(?:IAL)?\.?\s*(?:N(?:[º°o]|ro)\.?\s*)?(\d{1,2})\b/i.exec(t);
   if(m) d.juzgado = m[1];
-  m = /suma de\s*\$\s*([\d.]+,\d{2})/i.exec(t) || /\$\s*([\d.]+,\d{2})/.exec(t);
-  if(m) d.monto = importeFlexible(m[1]);
+  m = /suma de\s*[$Ss5]?\s*([\d.\s]+,\d{2})/i.exec(t) || /\$\s*([\d.\s]+,\d{2})/.exec(t);
+  if(m) d.monto = importeFlexible(m[1].replace(/\s/g, ""));
+  else { const montos = [...t.matchAll(/\d{1,3}(?:\.\d{3})+,\d{2}/g)].map(x => importeFlexible(x[0])); if(montos.length) d.monto = Math.max(...montos); }
   m = /DEO\s*N[º°]?\s*:?\s*(\d{5,})/i.exec(t);
   if(m) d.deo = m[1];
   m = /(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+de\s+(\d{4})/i.exec(t);
@@ -2960,6 +2962,20 @@ function decretoDeExpte(expte){
   }));
   return hallado;
 }
+// Decreto por nombre del actor, cuando el expediente no está en la base. Solo si el nombre tiene un único decreto.
+function decretoDeActor(actor){
+  const norm = s => stripAccents(s || "").toUpperCase().replace(/\s+Y\s+O(TROS|\.)?\.?\s*$/i, "").replace(/[^A-Z]/g, "");
+  const k = norm(actor); if(!k) return null;
+  const decs = new Set();
+  const sumar = txt => { const dd = decretoDeCaratula(txt); if(dd) decs.add(dd); };
+  compsVivas().forEach(c => (c.filas || []).forEach(f => {
+    if(f.borrado || norm(f.name) !== k) return;
+    sumar(f.caratula);
+    juiciosDeFila(f).forEach(sumar);
+  }));
+  (CLIENTS_DB || []).forEach(c => { if(norm(c.name) === k) juiciosDeFila({caratula: c.caratula}).forEach(sumar); });
+  return decs.size === 1 ? {decreto: [...decs][0]} : null;
+}
 function procesarOficioTexto(texto){
   const d = parsearOficioDeo(texto);
   const faltan = [];
@@ -2975,9 +2991,11 @@ function procesarOficioTexto(texto){
     comentarios: com
   });
   const hit = d.expte ? decretoDeExpte(d.expte) : null;
+  const porActor = !(hit && hit.decreto) && d.actor ? decretoDeActor(d.actor) : null;
   if(hit && hit.decreto) embForm.decreto = hit.decreto;
+  else if(porActor) embForm.decreto = porActor.decreto;
   embPintarForm();
-  const nota = hit && hit.decreto ? ` El decreto (${hit.decreto}) lo tomé de la base por el expediente.` : (d.expte && !hit ? " No encontré ese expediente en la base: elegí el decreto a mano." : "");
+  const nota = hit && hit.decreto ? ` El decreto (${hit.decreto}) lo tomé de la base por el expediente.` : porActor ? ` El decreto (${porActor.decreto}) lo tomé de la base por el nombre del actor.` : (d.expte && !hit ? " No encontré ese expediente en la base: elegí el decreto a mano." : "");
   embCargaMsg((faltan.length ? `Completé lo que encontré. Faltó: ${faltan.join(", ")}. Completalo a mano.` : "✓ Completé los datos del oficio. Revisalos y tocá AGREGAR EMBARGO.") + nota, faltan.length > 0 || (d.expte && !hit));
 }
 async function procesarOficioArchivo(archivo){
@@ -5153,7 +5171,7 @@ let ctBusqueda = "";
 function listaClientesEstudio(){
   const grupos = new Map();
   const agregar = (clave, nombre, docnum, juicio) => {
-    if(!grupos.has(clave)) grupos.set(clave, {nombre: "", docnum: "", juicios: []});
+    if(!grupos.has(clave)) grupos.set(clave, {clave, nombre: "", docnum: "", juicios: [], telefonos: []});
     const g = grupos.get(clave);
     if(!g.nombre && nombre) g.nombre = nombre;
     if(!g.docnum && docnum) g.docnum = docnum;
@@ -5166,7 +5184,7 @@ function listaClientesEstudio(){
     const nombre = nombreLindo(c.name);
     agregar(clave, nombre, c.dni, null);
     const g = grupos.get(clave);
-    if(!g.tel && c.phones && c.phones.length) g.tel = c.phones.join(", ");
+    (c.phones || []).forEach(p => { if(!g.telefonos.includes(p)) g.telefonos.push(p); });
     juiciosDeFila({caratula: c.caratula}).forEach(txt => {
       const lj = leerCaratula(txt);
       agregar(clave, nombre, c.dni, {origen: "Base de clientes", decreto: lj.decreto || "", juzgado: (/\d+/.exec(lj.juzgado || "") || [""])[0], expte: lj.expte || "", juicio: lj.juicio || txt, honorarios: "", embargo: false, bruto: 0});
@@ -5200,7 +5218,7 @@ function listaClientesEstudio(){
     const nombre = nombreLindo(cl.nombre);
     agregar(clave, nombre, cl.dni, null);
     const g = grupos.get(clave);
-    if(!g.tel && cl.telefonos && cl.telefonos.length) g.tel = cl.telefonos.join(", ");
+    (cl.telefonos || []).forEach(p => { if(!g.telefonos.includes(p)) g.telefonos.push(p); });
     (cl.juicios || []).forEach(j => agregar(clave, nombre, cl.dni, {origen: "Listado general", decreto: j.decreto || "", juzgado: j.juzgado || "", expte: j.expte || "", juicio: j.caratula || "", honorarios: "", embargo: false, bruto: 0}));
   });
   grupos.forEach(g => {
@@ -5213,6 +5231,13 @@ function listaClientesEstudio(){
       if(conExp.has(d) || vistos.has(d)) return false;
       vistos.add(d); return true;
     });
+  });
+  const datos = ARCHIVO[CDAT_ID];
+  grupos.forEach((g, clave) => {
+    const ov = datos && (datos.filas || []).find(x => x.clave === clave && !x.borrado);
+    if(ov && Array.isArray(ov.telefonos)) g.telefonos = ov.telefonos;
+    g.direccion = ov ? (ov.direccion || "") : "";
+    g.tel = g.telefonos.join(", ");
   });
   let lista = [...grupos.values()];
   const q = stripAccents(ctBusqueda).toUpperCase().trim();
@@ -5227,8 +5252,10 @@ function renderClientesEstudio(){
   const lista = listaClientesEstudio();
   const totJ = lista.reduce((s, g) => s + g.juicios.length, 0);
   const filas = lista.map(g => `<tr>
-      <td><b>${esc(g.nombre || "—")}</b>${g.tel ? `<br><span class="muted" style="font-size:12px;">${esc(g.tel)}</span>` : ""}</td>
+      <td><b>${esc(g.nombre || "—")}</b></td>
       <td>${esc(g.docnum || "—")}</td>
+      <td><input type="text" data-cli-clave="${esc(g.clave)}" data-cli-campo="telefonos" value="${esc((g.telefonos || []).join(", "))}" placeholder="Agregar teléfono" style="width:190px;"></td>
+      <td><input type="text" data-cli-clave="${esc(g.clave)}" data-cli-campo="direccion" value="${esc(g.direccion || "")}" placeholder="Agregar dirección" style="width:230px;"></td>
       <td>${g.juicios.length ? "" : '<span class="muted">Sin juicios cargados</span>'}${g.juicios.map(j => `<div style="padding:3px 0;border-bottom:1px dashed #e2e8f0;">${j.embargo ? '<span class="bdg">⚖️ EMBARGO</span> ' : ""}${j.decreto ? `<b>${esc(j.decreto)}</b> · ` : ""}${j.juzgado ? `Juzgado ${esc(j.juzgado)} · ` : ""}${j.expte ? `Expte. ${esc(j.expte)} · ` : ""}${esc(j.juicio || "")}<br><span class="muted" style="font-size:12px;">${esc(j.origen)}${j.honorarios ? " · honorarios: " + esc(j.honorarios) : ""}${j.bruto ? " · " + fmtMoney(j.bruto) : ""}</span></div>`).join("")}</td>
     </tr>`).join("");
   cont.innerHTML = `<div class="panel">
@@ -5241,8 +5268,8 @@ function renderClientesEstudio(){
       </div>
       ${ctMsg ? `<div class="muted" style="margin-top:8px;">${esc(ctMsg)}</div>` : ""}
       <div style="overflow-x:auto;margin-top:10px;">
-        <table><thead><tr><th>Cliente</th><th>DNI</th><th>Juicios</th></tr></thead>
-        <tbody>${filas || '<tr><td colspan="3">Todavía no hay clientes cargados.</td></tr>'}</tbody></table>
+        <table><thead><tr><th>Cliente</th><th>DNI</th><th>Teléfonos</th><th>Dirección</th><th>Juicios</th></tr></thead>
+        <tbody>${filas || '<tr><td colspan="5">Todavía no hay clientes cargados.</td></tr>'}</tbody></table>
       </div>
     </div>`;
   document.getElementById("ctBuscar").addEventListener("input", e => {
@@ -5252,6 +5279,7 @@ function renderClientesEstudio(){
     const n = document.getElementById("ctBuscar"); n.focus(); n.setSelectionRange(p, p);
   });
   wireImport();
+  if(!cont._cli){ cont._cli = true; cont.addEventListener("change", cliOnChange); }
 }
 
 // ---------- CLIENTES: listado general (importado desde DOCX→JSON) ----------
@@ -5355,6 +5383,20 @@ function renderFallecidos(){
   });
 }
 
+// CLIENTES: teléfonos y dirección editables (se guardan aparte, la base no cambia)
+function cliOnChange(e){
+  const el = e.target, clave = el.dataset.cliClave, campo = el.dataset.cliCampo;
+  if(!clave || !campo) return;
+  if(!ARCHIVO[CDAT_ID]) ARCHIVO[CDAT_ID] = {id: CDAT_ID, complementaria: "", anio: "", fechaPago: "", mod: ahoraMs(), filas: []};
+  const c = ARCHIVO[CDAT_ID];
+  let f = (c.filas || []).find(x => x.clave === clave && !x.borrado);
+  if(!f){ f = {clave, telefonos: null, direccion: null}; c.filas.push(f); }
+  if(campo === "telefonos") f.telefonos = el.value.split(/[,;\n]/).map(s => s.trim()).filter(Boolean);
+  else f.direccion = el.value.trim();
+  f.mod = ahoraMs(); c.mod = f.mod;
+  guardarArchivo();
+  renderClientesEstudio();
+}
 function listaDeudores(){
   const grupos = new Map();
   compsVivas().forEach(c => c.filas.forEach((f, i) => {
